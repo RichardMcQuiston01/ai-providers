@@ -1,9 +1,11 @@
-# Project Title
+# @richardmcquiston01/ai-providers
 
 - Author:  Richard McQuiston
 - Website:  https://richardmcquiston.com/
 
 ## Overview
+
+TypeScript based wrapper for AI providers used for Image and Text generation.
 
 ## Getting Started
 
