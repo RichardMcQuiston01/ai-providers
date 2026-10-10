@@ -1,0 +1,81 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import {
+  checkProviderHost,
+  isLoopbackHost,
+  ok,
+  parseAllowedHosts,
+  providerMessage,
+  toBase64,
+} from '../src/index.js';
+
+void describe('checkProviderHost', () => {
+  void it('accepts loopback hosts, refuses others unless allowed', () => {
+    assert.deepEqual(
+      checkProviderHost('OLLAMA_HOST', 'http://localhost:11434/'),
+      ok('http://localhost:11434')
+    );
+    assert.match(
+      (
+        checkProviderHost('COMFYUI_HOST', 'http://gpu.lan:8188', {
+          allowedHostsLabel: 'AI_ALLOWED_HOSTS',
+        }) as { error: string }
+      ).error,
+      /isn't this machine.*AI_ALLOWED_HOSTS/
+    );
+    assert.deepEqual(
+      checkProviderHost('COMFYUI_HOST', 'http://gpu.lan:8188', {
+        allowedHosts: ['gpu.lan'],
+      }),
+      ok('http://gpu.lan:8188')
+    );
+    assert.match(
+      (checkProviderHost('X', 'nope') as { error: string }).error,
+      /not a URL/
+    );
+    assert.match(
+      (checkProviderHost('X', 'ftp://127.0.0.1') as { error: string }).error,
+      /http or https/
+    );
+    assert.match(
+      (checkProviderHost('X', 'http://127.0.0.1:1/api') as { error: string })
+        .error,
+      /just the address/
+    );
+  });
+
+  void it('parses allow lists and knows loopback', () => {
+    assert.deepEqual(parseAllowedHosts(' GPU-box, 192.168.1.20  nas '), [
+      'gpu-box',
+      '192.168.1.20',
+      'nas',
+    ]);
+    assert.ok(isLoopbackHost('LOCALHOST'));
+    assert.ok(isLoopbackHost('[::1]'));
+    assert.ok(!isLoopbackHost('gpu.lan'));
+  });
+});
+
+void describe('http helpers', () => {
+  void it('pulls the message out of a provider error body', () => {
+    assert.equal(
+      providerMessage('{"error":"model not found"}'),
+      'model not found'
+    );
+    assert.equal(
+      providerMessage('{"error":{"message":"bad node"}}'),
+      'bad node'
+    );
+    assert.equal(providerMessage('{"message":"top level"}'), 'top level');
+    assert.equal(providerMessage(''), 'no details');
+    assert.equal(providerMessage('plain'), 'plain');
+    assert.equal(providerMessage('x'.repeat(400)).length, 301);
+  });
+
+  void it('encodes base64 without Buffer, including large inputs', () => {
+    const data = new Uint8Array(100_000).map((_, index) => index % 256);
+    assert.equal(toBase64(data), Buffer.from(data).toString('base64'));
+    assert.equal(toBase64(new Uint8Array()), '');
+  });
+});
