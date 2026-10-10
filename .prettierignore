@@ -2,3 +2,7 @@ node_modules
 .next
 out
 package-lock.json
+dist
+bun.lock
+CHANGELOG.md
+.changeset/*.md

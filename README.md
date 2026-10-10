@@ -1,21 +1,172 @@
 # @richardmcquiston01/ai-providers
 
+<!-- prettier-ignore-start -->
 - Author:  Richard McQuiston
 - Website:  https://richardmcquiston.com/
+<!-- prettier-ignore-end -->
 
 ## Overview
 
-TypeScript based wrapper for AI providers used for Image and Text generation.
+Swappable AI providers for TypeScript. Your app codes against two small
+interfaces: `TextGenerator` for text and `ImageGenerator` for image edits.
+You then choose the provider for each task in configuration: a local model
+today, a hosted API tomorrow, without changing the calling code.
+
+- **Ollama** (`OllamaTextGenerator`): text from a local model.
+- **ComfyUI** (`ComfyUiImageGenerator`): image edits with your own exported
+  workflows.
+- **Gemini** (planned): text and images, using
+  `@richardmcquiston01/gemini-icon-gen` as an optional peer dependency.
+
+Design:
+
+- **Results, not exceptions.** Every call returns
+  `{ ok: true, value } | { ok: false, error }`. Errors are specific: they
+  name the provider, the model or workflow, the HTTP status and the
+  provider's own message.
+- **Providers only generate.** Prompt rules, output checks and the decision
+  to use a result stay in your app, so swapping providers can't weaken
+  them.
+- **Local by default.** `checkProviderHost` accepts only this machine,
+  unless a host is on your allow list.
+- **Runtime-neutral.** The main entry runs in Node 20.3+, Bun and browsers,
+  and ships as ESM and CommonJS with types. The only Node-specific code,
+  reading workflows from a folder, is in the `./node` subpath.
 
 ## Getting Started
 
-### Prerequisites
+```bash
+bun add @richardmcquiston01/ai-providers
+```
 
-### Installation
+### Text with Ollama
 
-### Usage
+```ts
+import {
+  checkProviderHost,
+  OllamaTextGenerator,
+  type TextGenerator,
+} from '@richardmcquiston01/ai-providers';
 
-### Examples
+const host = checkProviderHost('OLLAMA_HOST', 'http://127.0.0.1:11434');
+if (!host.ok) throw new Error(host.error);
+
+const text: TextGenerator = new OllamaTextGenerator({
+  host: host.value,
+  model: 'llama3.2',
+});
+
+const result = await text.generateText({
+  instructions: 'Rewrite the caption. No emojis. Keep the link.',
+  prompt: 'Handmade ink pad holder - $20 https://www.etsy.com/listing/1',
+});
+if (result.ok) console.log(result.value.text);
+else console.error(result.error); // e.g. Ollama (model "llama3.2") failed (HTTP 404): model not found
+```
+
+A reasoning model's `<think>…</think>` block is removed from the reply.
+Pass `images` to send pictures to a vision model.
+
+### Image edits with ComfyUI
+
+1. Build a workflow in ComfyUI with a **LoadImage** node and a
+   **SaveImage** node.
+2. Export it with **Workflow → Export (API)**. A normal Save writes the UI
+   format, which is refused with a hint.
+3. In the exported JSON, set these placeholders:
+
+   | Placeholder         | Where                                      | Filled with                 |
+   | ------------------- | ------------------------------------------ | --------------------------- |
+   | `"{{INPUT_IMAGE}}"` | the LoadImage node's `image` (required)    | the uploaded image          |
+   | `{{PROMPT}}`        | anywhere inside a text value               | `request.prompt`            |
+   | `"{{SEED}}"`        | a sampler's `seed` (optional, whole value) | a random number on each run |
+
+```ts
+import { ComfyUiImageGenerator } from '@richardmcquiston01/ai-providers';
+import { directoryWorkflowSource } from '@richardmcquiston01/ai-providers/node';
+
+const image = new ComfyUiImageGenerator({
+  workflows: directoryWorkflowSource('comfyui-workflows'), // touch-up.json → mode "touch-up"
+  label: 'workflows in comfyui-workflows',
+});
+
+const modes = await image.listModes(); // ok(['touch-up', ...])
+const edited = await image.generateImage({
+  instructions: '',
+  prompt: 'soft studio light, clean white background',
+  images: [{ mimeType: 'image/jpeg', data: photoBytes }],
+  mode: 'touch-up',
+});
+if (edited.ok) save(edited.value.image.data, edited.value.image.mimeType);
+```
+
+The image is uploaded and the workflow queued. Its history is then polled
+(5-minute limit, `runTimeoutMs`) and the first saved output downloaded
+(25 MB cap). Placeholders are filled in the parsed JSON, so a prompt can't
+break the workflow. In a browser, or for workflows bundled with your app,
+use `memoryWorkflowSource({ 'touch-up': jsonText })` instead.
+
+### Choosing providers from configuration
+
+Use `checkProviderHost` and `parseAllowedHosts` with your own settings:
+
+```ts
+const allowedHosts = parseAllowedHosts(env.AI_ALLOWED_HOSTS); // "gpu-box, 192.168.1.20"
+const host = checkProviderHost('COMFYUI_HOST', env.COMFYUI_HOST, {
+  allowedHosts,
+  allowedHostsLabel: 'AI_ALLOWED_HOSTS',
+});
+```
+
+### Writing a provider
+
+Implement either interface:
+
+```ts
+interface TextGenerator {
+  readonly provider: string;
+  readonly model: string;
+  generateText(request: TextRequest): Promise<Result<{ text: string }>>;
+}
+
+interface ImageGenerator {
+  readonly provider: string;
+  readonly model: string;
+  listModes(): Promise<Result<readonly string[]>>;
+  generateImage(
+    request: ImageRequest
+  ): Promise<Result<{ image: AiImage; notes: string | null }>>;
+}
+```
+
+`callProvider`, `readJson` and `providerMessage` give a new provider the
+same timeouts, cancellation (`signal`) and error wording as the built-in
+ones. Every provider takes an injectable `fetch`, so it can be tested
+without a network.
+
+## Exports
+
+| Subpath     | What                                                                                            |
+| ----------- | ----------------------------------------------------------------------------------------------- |
+| `.`         | everything below except `./node`                                                                |
+| `./ollama`  | `OllamaTextGenerator`, `stripThinking`                                                          |
+| `./comfyui` | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
+| `./node`    | `directoryWorkflowSource` (Node/Bun only)                                                       |
+
+## Development
+
+```bash
+bun install
+bun run typecheck
+bun run lint
+bun run format:check
+bun run test
+bun run build      # dist/: ESM (.js), CommonJS (.cjs) and .d.ts/.d.cts
+```
+
+Releases are published to npm by GitHub Actions when a `vX.Y.Z` tag is
+pushed on a commit that's on `main`. The repository needs the `NPM_TOKEN`
+secret. See [CLAUDE.md](./CLAUDE.md) for the branch flow.
 
 ## Buy Me a Coffee
 
@@ -31,4 +182,5 @@ Apache 2
 
 ## Copyright
 
+<!-- prettier-ignore -->
 (c)2026 Richard McQuiston.  All rights reserved.
