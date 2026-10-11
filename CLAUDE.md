@@ -7,15 +7,15 @@ Project memory for Claude Code. Read this before changing anything.
 `@richardmcquiston01/ai-providers`: swappable AI providers behind two small
 interfaces, `TextGenerator` and `ImageGenerator` (`src/port.ts`).
 Extracted from etsy-dashboard's `src/ai/`. Consumers: etsy-dashboard
-(captions with Ollama or Gemini, photo edits with ComfyUI or Gemini), and
-later Maker Toolkit. `ROADMAP.md` has what comes next (Claude,
-`createProviders`).
+(captions with Ollama, Gemini or Claude, photo edits with ComfyUI or
+Gemini), and later Maker Toolkit. `ROADMAP.md` has what comes next
+(`createProviders`, model listing).
 
 ## Layout
 
 ```
 src/
-  index.ts      barrel: everything except ./node and ./gemini (runtime-neutral)
+  index.ts      barrel: everything except ./node, ./gemini and ./claude (runtime-neutral)
   result.ts     Result<T>, ok, err, describeUnknownError
   port.ts       AiImage, TextGenerator, ImageGenerator, requests, FetchLike
   http.ts       callProvider (timeout + signal + specific errors), readJson,
@@ -27,12 +27,15 @@ src/
   gemini.ts     subpath ./gemini: GeminiTextGenerator, GeminiImageGenerator over
                 the optional peer @richardmcquiston01/gemini-icon-gen (dynamic
                 import(), injectable loadModule for tests)
+  claude.ts     subpath ./claude: ClaudeTextGenerator over the optional peer
+                @anthropic-ai/sdk (dynamic import(), injectable loadModule; tests run
+                the real SDK against a fake fetch)
   node.ts       subpath ./node: directoryWorkflowSource (the only node:* code)
 test/           node:test + node:assert, run by bun test; fake fetch, no network
 ```
 
 Adding a provider: `src/<provider>.ts`, export it from `src/index.ts` (unless
-it loads an optional peer, like `gemini.ts`), add
+it loads an optional peer, like `gemini.ts` and `claude.ts`), add
 the entry to `tsup.config.ts`, `package.json` `exports` and `typesVersions`,
 test it against a fake `fetch`, and add a changeset. A provider whose SDK
 is heavy (Gemini, Claude) takes it as an **optional peer dependency**

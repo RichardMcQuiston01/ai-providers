@@ -8,6 +8,7 @@ export default defineConfig({
     ollama: 'src/ollama.ts',
     comfyui: 'src/comfyui.ts',
     gemini: 'src/gemini.ts',
+    claude: 'src/claude.ts',
     node: 'src/node.ts',
   },
   format: ['esm', 'cjs'],
