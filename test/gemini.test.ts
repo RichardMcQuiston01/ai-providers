@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { inspect } from 'node:util';
 
 import {
   DEFAULT_GEMINI_IMAGE_MODEL,
@@ -339,5 +340,25 @@ void describe('GeminiImageGenerator', () => {
       mode: null,
     });
     assert.match(second.ok ? '' : second.error, /isn't valid base64/);
+  });
+});
+
+void describe('Gemini API key', () => {
+  void it('stays out of JSON, keys, spreads and inspect output', () => {
+    const secret = 'AIza-secret-test-key';
+    for (const generator of [
+      new GeminiTextGenerator({ apiKey: secret }),
+      new GeminiImageGenerator({ apiKey: secret }),
+    ]) {
+      assert.doesNotMatch(JSON.stringify(generator), /secret-test-key/);
+      assert.doesNotMatch(
+        inspect(generator, { showHidden: true, depth: 5 }),
+        /secret-test-key/
+      );
+      assert.doesNotMatch(JSON.stringify({ ...generator }), /secret-test-key/);
+      assert.ok(
+        !Object.getOwnPropertyNames(generator).some((name) => /key/i.test(name))
+      );
+    }
   });
 });

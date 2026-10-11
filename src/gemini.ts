@@ -149,12 +149,14 @@ function toInline(image: AiImage, label: string): Result<GeminiInlineImage> {
 export class GeminiTextGenerator implements TextGenerator {
   readonly provider = 'gemini';
   readonly model: string;
-  private readonly apiKey: string;
+  // A runtime-private field, so the key stays out of JSON.stringify,
+  // Object.keys, spreads and util.inspect / console.log of the generator.
+  readonly #apiKey: string;
   private readonly timeoutMs: number;
   private readonly loader: GeminiModuleLoader;
 
   constructor(options: GeminiOptions) {
-    this.apiKey = options.apiKey;
+    this.#apiKey = options.apiKey;
     this.model = options.model?.trim() || DEFAULT_GEMINI_TEXT_MODEL;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS;
     this.loader = options.loadModule ?? loadGeminiPackage;
@@ -162,7 +164,7 @@ export class GeminiTextGenerator implements TextGenerator {
 
   async generateText(request: TextRequest): Promise<Result<TextResult>> {
     const what = `Gemini (model "${this.model}")`;
-    const key = checkKey(this.apiKey);
+    const key = checkKey(this.#apiKey);
     if (!key.ok) return key;
     if (request.images !== undefined && request.images.length > 0) {
       return err(`${what} text generation doesn't take images yet.`);
@@ -204,12 +206,14 @@ export class GeminiTextGenerator implements TextGenerator {
 export class GeminiImageGenerator implements ImageGenerator {
   readonly provider = 'gemini';
   readonly model: string;
-  private readonly apiKey: string;
+  // A runtime-private field, so the key stays out of JSON.stringify,
+  // Object.keys, spreads and util.inspect / console.log of the generator.
+  readonly #apiKey: string;
   private readonly timeoutMs: number;
   private readonly loader: GeminiModuleLoader;
 
   constructor(options: GeminiOptions) {
-    this.apiKey = options.apiKey;
+    this.#apiKey = options.apiKey;
     this.model = options.model?.trim() || DEFAULT_GEMINI_IMAGE_MODEL;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS;
     this.loader = options.loadModule ?? loadGeminiPackage;
@@ -221,7 +225,7 @@ export class GeminiImageGenerator implements ImageGenerator {
 
   async generateImage(request: ImageRequest): Promise<Result<ImageResult>> {
     const what = `Gemini (model "${this.model}")`;
-    const key = checkKey(this.apiKey);
+    const key = checkKey(this.#apiKey);
     if (!key.ok) return key;
     if (request.mode !== null && request.mode !== this.model) {
       return err(
