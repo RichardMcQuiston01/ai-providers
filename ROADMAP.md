@@ -1,15 +1,13 @@
 # Roadmap
 
-Done: Ollama and ComfyUI (0.1.0), Gemini text and image edits (`./gemini`).
+Done: Ollama and ComfyUI (0.1.0), Gemini text and image edits (`./gemini`),
+Claude text (`./claude`).
 
-1. **Claude provider** (text). The Anthropic API, keyed per use (a Claude
-   plan doesn't include API use). Subpath `./claude`, same optional-peer
-   pattern for the SDK, or plain `fetch`.
-2. **`createProviders(config)`**: build the configured providers from a
+1. **`createProviders(config)`**: build the configured providers from a
    plain object (provider name, host, model, key), so apps don't each
    write the same switch. Keys are passed in, never read from the
    environment.
-3. **Model listing**: `listModels()` for Ollama (`GET /api/tags`), for a
+2. **Model listing**: `listModels()` for Ollama (`GET /api/tags`), for a
    settings page's dropdown.
 
 Not planned: streaming, chat history, or tool use. This package covers

@@ -18,6 +18,8 @@ today, a hosted API tomorrow, without changing the calling code.
 - **Gemini** (`GeminiTextGenerator`, `GeminiImageGenerator`): text and
   photo edits with Google's Gemini API, using
   `@richardmcquiston01/gemini-icon-gen` as an optional peer dependency.
+- **Claude** (`ClaudeTextGenerator`): text with Anthropic's Claude API,
+  using the official `@anthropic-ai/sdk` as an optional peer dependency.
 
 Design:
 
@@ -149,6 +151,43 @@ const edited = await image.generateImage({
 - `timeoutMs` (default 120 s) and `signal` stop waiting for a call. The
   underlying request can't be aborted, so it's abandoned, not cancelled.
 
+### Text with Claude
+
+Claude is a hosted API with its own key (create one in the Claude Console;
+a Claude plan doesn't include API use). Install the SDK alongside:
+
+```bash
+bun add @richardmcquiston01/ai-providers @anthropic-ai/sdk
+```
+
+```ts
+import { ClaudeTextGenerator } from '@richardmcquiston01/ai-providers/claude';
+
+const apiKey: string = env.ANTHROPIC_API_KEY; // your app reads the key; the package never does
+
+const text = new ClaudeTextGenerator({ apiKey }); // claude-opus-5-5 unless you pass model
+const reply = await text.generateText({
+  instructions: 'Rewrite captions to be short and friendly.',
+  prompt: 'Handmade oak coasters, set of 4',
+});
+```
+
+- `instructions` become the system prompt (optional); images (PNG, JPEG,
+  WebP, GIF) go before the prompt.
+- `effort` (`low` … `max`) sets `output_config.effort`; left out, the
+  model's default applies. For short rewrites, `low` is usually enough.
+- On models that support it (Claude Fable 5.1, Opus 5.5, Opus 5, Sonnet
+  5.5) the request opts into the server-side refusal fallback
+  (`fallbacks: "default"`), so a declined request is re-run on a fallback
+  model in the same call. Pass `refusalFallback: false` to turn it off. A
+  request still declined comes back as an error naming the category.
+- API errors come back with their status and Anthropic's message (401 says
+  the key is wrong, 404 to check the model). Credentials come only from
+  `apiKey`; the SDK isn't allowed to fall back to `ANTHROPIC_AUTH_TOKEN`.
+- `timeoutMs` (default 120 s) and `signal` cancel the request itself.
+- Without the SDK installed, it returns an error naming the package. The
+  `./claude` subpath is kept out of the main entry.
+
 ### Choosing providers from configuration
 
 Use `checkProviderHost` and `parseAllowedHosts` with your own settings:
@@ -191,10 +230,11 @@ without a network.
 
 | Subpath     | What                                                                                            |
 | ----------- | ----------------------------------------------------------------------------------------------- |
-| `.`         | everything below except `./gemini` and `./node`                                                 |
+| `.`         | everything below except `./gemini`, `./claude` and `./node`                                     |
 | `./ollama`  | `OllamaTextGenerator`, `stripThinking`                                                          |
 | `./comfyui` | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
 | `./gemini`  | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
+| `./claude`  | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                               |
 | `./node`    | `directoryWorkflowSource` (Node/Bun only)                                                       |
 
 ## Development

@@ -1,12 +1,13 @@
 {
   "name": "@richardmcquiston01/ai-providers",
-  "version": "0.2.2",
-  "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with local Ollama and ComfyUI adapters and Gemini (optional peer). Functions return Results instead of throwing; the core is runtime-neutral.",
+  "version": "0.3.0",
+  "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with local Ollama and ComfyUI adapters and Gemini and Claude (optional peers). Functions return Results instead of throwing; the core is runtime-neutral.",
   "keywords": [
     "ai",
     "llm",
     "ollama",
     "gemini",
+    "claude",
     "comfyui",
     "image-generation",
     "text-generation",
@@ -42,6 +43,9 @@
       ],
       "gemini": [
         "./dist/gemini.d.cts"
+      ],
+      "claude": [
+        "./dist/claude.d.cts"
       ]
     }
   },
@@ -86,6 +90,16 @@
         "default": "./dist/gemini.cjs"
       }
     },
+    "./claude": {
+      "import": {
+        "types": "./dist/claude.d.ts",
+        "default": "./dist/claude.js"
+      },
+      "require": {
+        "types": "./dist/claude.d.cts",
+        "default": "./dist/claude.cjs"
+      }
+    },
     "./node": {
       "import": {
         "types": "./dist/node.d.ts",
@@ -119,14 +133,19 @@
     "version-packages": "changeset version"
   },
   "peerDependencies": {
-    "@richardmcquiston01/gemini-icon-gen": ">=0.3.0 <1"
+    "@richardmcquiston01/gemini-icon-gen": ">=0.3.0 <1",
+    "@anthropic-ai/sdk": ">=0.133.0 <1"
   },
   "peerDependenciesMeta": {
     "@richardmcquiston01/gemini-icon-gen": {
       "optional": true
+    },
+    "@anthropic-ai/sdk": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "@changesets/cli": "^3.0.3",
     "@eslint/js": "^10.0.1",
     "@richardmcquiston01/gemini-icon-gen": "^0.3.0",
