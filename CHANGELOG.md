@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.2.1
+
+### Patch Changes
+
+- dacef2e: `GeminiTextGenerator` now defaults to `gemini-3.8-flash`: Google no longer offers `gemini-2.5-flash` to new API keys. Pass `model` to choose another.
+
 ## 0.2.0
 
 ### Minor Changes
