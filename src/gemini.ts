@@ -12,7 +12,7 @@ import { describeUnknownError, err, ok, type Result } from './result.js';
 
 /** The optional peer package the Gemini providers are built on. */
 export const GEMINI_PACKAGE = '@richardmcquiston01/gemini-icon-gen';
-export const DEFAULT_GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_GEMINI_TEXT_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
 
 const GEMINI_IMAGE_TYPES: ReadonlySet<string> = new Set([
