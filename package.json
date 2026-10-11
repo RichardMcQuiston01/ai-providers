@@ -1,6 +1,6 @@
 {
   "name": "@richardmcquiston01/ai-providers",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with local Ollama and ComfyUI adapters and Gemini (optional peer). Functions return Results instead of throwing; the core is runtime-neutral.",
   "keywords": [
     "ai",
