@@ -125,7 +125,7 @@ import {
 
 const apiKey: string = env.GEMINI_API_KEY; // your app reads the key; the package never does
 
-const text = new GeminiTextGenerator({ apiKey }); // gemini-2.5-flash unless you pass model
+const text = new GeminiTextGenerator({ apiKey }); // gemini-3.8-flash unless you pass model
 const caption = await text.generateText({
   instructions: 'Rewrite the caption. No emojis. Keep the link.',
   prompt: 'Handmade ink pad holder - $20 https://www.etsy.com/listing/1',
