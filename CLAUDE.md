@@ -7,27 +7,32 @@ Project memory for Claude Code. Read this before changing anything.
 `@richardmcquiston01/ai-providers`: swappable AI providers behind two small
 interfaces, `TextGenerator` and `ImageGenerator` (`src/port.ts`).
 Extracted from etsy-dashboard's `src/ai/`. Consumers: etsy-dashboard
-(captions with Ollama, photo edits with ComfyUI), and later Maker Toolkit.
-`ROADMAP.md` has what comes next (Gemini, Claude, `createProviders`).
+(captions with Ollama or Gemini, photo edits with ComfyUI or Gemini), and
+later Maker Toolkit. `ROADMAP.md` has what comes next (Claude,
+`createProviders`).
 
 ## Layout
 
 ```
 src/
-  index.ts      barrel: everything except ./node (runtime-neutral)
+  index.ts      barrel: everything except ./node and ./gemini (runtime-neutral)
   result.ts     Result<T>, ok, err, describeUnknownError
   port.ts       AiImage, TextGenerator, ImageGenerator, requests, FetchLike
   http.ts       callProvider (timeout + signal + specific errors), readJson,
-                providerMessage, toBase64 (no Buffer)
+                providerMessage, toBase64/fromBase64 (no Buffer)
   hosts.ts      checkProviderHost (loopback unless allowed), parseAllowedHosts
   ollama.ts     subpath ./ollama: OllamaTextGenerator, stripThinking
   comfyui.ts    subpath ./comfyui: ComfyUiImageGenerator, WorkflowSource,
                 parseWorkflow, fillWorkflow, readHistory, memoryWorkflowSource
+  gemini.ts     subpath ./gemini: GeminiTextGenerator, GeminiImageGenerator over
+                the optional peer @richardmcquiston01/gemini-icon-gen (dynamic
+                import(), injectable loadModule for tests)
   node.ts       subpath ./node: directoryWorkflowSource (the only node:* code)
 test/           node:test + node:assert, run by bun test; fake fetch, no network
 ```
 
-Adding a provider: `src/<provider>.ts`, export it from `src/index.ts`, add
+Adding a provider: `src/<provider>.ts`, export it from `src/index.ts` (unless
+it loads an optional peer, like `gemini.ts`), add
 the entry to `tsup.config.ts`, `package.json` `exports` and `typesVersions`,
 test it against a fake `fetch`, and add a changeset. A provider whose SDK
 is heavy (Gemini, Claude) takes it as an **optional peer dependency**
