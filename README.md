@@ -15,7 +15,8 @@ today, a hosted API tomorrow, without changing the calling code.
 - **Ollama** (`OllamaTextGenerator`): text from a local model.
 - **ComfyUI** (`ComfyUiImageGenerator`): image edits with your own exported
   workflows.
-- **Gemini** (planned): text and images, using
+- **Gemini** (`GeminiTextGenerator`, `GeminiImageGenerator`): text and
+  photo edits with Google's Gemini API, using
   `@richardmcquiston01/gemini-icon-gen` as an optional peer dependency.
 
 Design:
@@ -106,6 +107,48 @@ The image is uploaded and the workflow queued. Its history is then polled
 break the workflow. In a browser, or for workflows bundled with your app,
 use `memoryWorkflowSource({ 'touch-up': jsonText })` instead.
 
+### Text and image edits with Gemini
+
+Gemini is a hosted API, so it needs a key (create one in Google AI Studio)
+and sends your prompts and images to Google. Install the optional peer
+package alongside this one:
+
+```bash
+bun add @richardmcquiston01/ai-providers @richardmcquiston01/gemini-icon-gen
+```
+
+```ts
+import {
+  GeminiImageGenerator,
+  GeminiTextGenerator,
+} from '@richardmcquiston01/ai-providers/gemini';
+
+const apiKey: string = env.GEMINI_API_KEY; // your app reads the key; the package never does
+
+const text = new GeminiTextGenerator({ apiKey }); // gemini-2.5-flash unless you pass model
+const caption = await text.generateText({
+  instructions: 'Rewrite the caption. No emojis. Keep the link.',
+  prompt: 'Handmade ink pad holder - $20 https://www.etsy.com/listing/1',
+});
+
+const image = new GeminiImageGenerator({ apiKey }); // gemini-2.5-flash-image
+const edited = await image.generateImage({
+  instructions: 'Keep the product exactly as it is. Do not add text.',
+  prompt: 'Place it on a light oak table in soft daylight.',
+  images: [{ mimeType: 'image/jpeg', data: photoBytes }], // then any references
+  mode: null, // the one mode, listModes() → [model]
+});
+```
+
+- Text needs non-empty `instructions`, and doesn't take images yet.
+- Images must be PNG, JPEG or WebP. Any text Gemini sends with an image
+  comes back as `notes`.
+- Without the peer package installed, both return an error naming it. The
+  `./gemini` subpath is kept out of the main entry, so apps that don't use
+  Gemini never resolve it.
+- `timeoutMs` (default 120 s) and `signal` stop waiting for a call. The
+  underlying request can't be aborted, so it's abandoned, not cancelled.
+
 ### Choosing providers from configuration
 
 Use `checkProviderHost` and `parseAllowedHosts` with your own settings:
@@ -148,9 +191,10 @@ without a network.
 
 | Subpath     | What                                                                                            |
 | ----------- | ----------------------------------------------------------------------------------------------- |
-| `.`         | everything below except `./node`                                                                |
+| `.`         | everything below except `./gemini` and `./node`                                                 |
 | `./ollama`  | `OllamaTextGenerator`, `stripThinking`                                                          |
 | `./comfyui` | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
+| `./gemini`  | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
 | `./node`    | `directoryWorkflowSource` (Node/Bun only)                                                       |
 
 ## Development

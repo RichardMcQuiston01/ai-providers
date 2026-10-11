@@ -90,3 +90,18 @@ export function toBase64(data: Uint8Array): string {
   }
   return btoa(binary);
 }
+
+/** Base64 → bytes without Buffer; null when the text isn't valid base64. */
+export function fromBase64(text: string): Uint8Array | null {
+  let binary: string;
+  try {
+    binary = atob(text);
+  } catch {
+    return null;
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
