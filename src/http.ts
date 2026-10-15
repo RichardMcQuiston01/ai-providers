@@ -4,10 +4,45 @@ import type { FetchLike } from './port.js';
 /** Default limit for one AI call; local GPUs and image models can be slow. */
 export const DEFAULT_AI_TIMEOUT_MS = 120_000;
 
+/** The longest an error body or JSON reply may be before reading stops. */
+export const MAX_TEXT_BYTES: number = 8 * 1024 * 1024;
+const MAX_ERROR_BODY_BYTES = 64 * 1024;
+/** The most redirects followed when a caller allows any. */
+const MAX_REDIRECTS = 3;
+
+export interface CallProviderOptions {
+  /**
+   * Redirects are not followed by default: a redirect would carry the
+   * request body (prompts, images) to wherever `Location` points. A caller
+   * that expects one passes a check that gets the absolute target and
+   * returns the URL to follow, or an error; every hop goes through it.
+   * Only for requests without a body.
+   */
+  readonly followRedirect?: (target: string) => Result<string>;
+}
+
+/** `https://host:port` for a message, or a fallback when `url` isn't absolute. */
+function describeOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return 'the configured address';
+  }
+}
+
+function isRedirect(response: Response): boolean {
+  return (
+    response.type === 'opaqueredirect' ||
+    (response.status >= 300 && response.status < 400)
+  );
+}
+
 /**
  * One HTTP call to an AI provider, with a timeout (combined with the
  * caller's signal) and errors that name the provider, what was being done,
- * the HTTP status and the provider's own message.
+ * the HTTP status and the provider's own message. A bad `timeoutMs` or URL
+ * is an error, not an exception, and redirects are refused (see
+ * CallProviderOptions).
  */
 export async function callProvider(
   fetchImpl: FetchLike,
@@ -15,33 +50,142 @@ export async function callProvider(
   init: RequestInit,
   what: string,
   timeoutMs: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: CallProviderOptions = {}
 ): Promise<Result<Response>> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 2 ** 31 - 1) {
+    return err(
+      `${what}: timeoutMs must be a number of milliseconds from 0 to ${2 ** 31 - 1}, not ${timeoutMs}`
+    );
+  }
   const timeout: AbortSignal = AbortSignal.timeout(timeoutMs);
   const combined: AbortSignal =
     signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
-  let response: Response;
-  try {
-    response = await fetchImpl(url, { ...init, signal: combined });
-  } catch (cause: unknown) {
-    if (timeout.aborted) {
+  let target: string = url;
+  for (let hop = 0; ; hop += 1) {
+    let response: Response;
+    try {
+      response = await fetchImpl(target, {
+        ...init,
+        redirect: 'manual',
+        signal: combined,
+      });
+    } catch (cause: unknown) {
+      if (timeout.aborted) {
+        return err(
+          `${what} took longer than ${Math.round(timeoutMs / 1000)} s and was stopped`
+        );
+      }
+      if (signal?.aborted === true) return err(`${what} was cancelled`);
       return err(
-        `${what} took longer than ${Math.round(timeoutMs / 1000)} s and was stopped`
+        `Could not reach ${what} at ${describeOrigin(target)}: ${describeUnknownError(cause)}. Is it running?`,
+        cause
       );
     }
-    if (signal?.aborted === true) return err(`${what} was cancelled`);
+    if (isRedirect(response)) {
+      await response.body?.cancel().catch(() => undefined);
+      const rawLocation: string | null = response.headers.get('location');
+      let next: string | null = null;
+      if (rawLocation !== null) {
+        try {
+          next = new URL(rawLocation, target).toString();
+        } catch {
+          next = null;
+        }
+      }
+      const status: string =
+        response.type === 'opaqueredirect'
+          ? 'a redirect'
+          : `HTTP ${response.status}`;
+      if (options.followRedirect === undefined || next === null) {
+        return err(
+          `${what} answered with a redirect (${status})${next === null ? '' : ` to ${describeOrigin(next)}`}; redirects aren't followed, so check the address.`
+        );
+      }
+      if (hop >= MAX_REDIRECTS) {
+        return err(`${what} redirected more than ${MAX_REDIRECTS} times`);
+      }
+      const allowed = options.followRedirect(next);
+      if (!allowed.ok) return allowed;
+      target = allowed.value;
+      continue;
+    }
+    if (!response.ok) {
+      const text = await readText(response, what, MAX_ERROR_BODY_BYTES, true);
+      return err(
+        `${what} failed (HTTP ${response.status}): ${providerMessage(text.ok ? text.value : '')}`
+      );
+    }
+    return ok(response);
+  }
+}
+
+/**
+ * Reads at most `maxBytes` of a body, then stops and cancels the rest, so a
+ * huge or endless reply can't fill memory. A read that fails (cancelled,
+ * cut off) is an error. With `truncate`, going over the cap returns what
+ * was read instead of an error.
+ */
+export async function readBytes(
+  response: Response,
+  what: string,
+  maxBytes: number,
+  truncate = false
+): Promise<Result<Uint8Array>> {
+  const declared: number = Number(response.headers.get('content-length'));
+  if (!truncate && Number.isFinite(declared) && declared > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    return err(tooLarge(what, declared, maxBytes));
+  }
+  if (response.body === null) return ok(new Uint8Array());
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (total + value.length > maxBytes) {
+        if (truncate) {
+          chunks.push(value.subarray(0, maxBytes - total));
+          total = maxBytes;
+          break;
+        }
+        return err(tooLarge(what, total + value.length, maxBytes));
+      }
+      chunks.push(value);
+      total += value.length;
+    }
+  } catch (cause: unknown) {
     return err(
-      `Could not reach ${what} at ${new URL(url).origin}: ${describeUnknownError(cause)}. Is it running?`,
+      `${what}: reading the reply failed: ${describeUnknownError(cause)}`,
       cause
     );
+  } finally {
+    await reader.cancel().catch(() => undefined);
   }
-  if (!response.ok) {
-    const text: string = await response.text().catch(() => '');
-    return err(
-      `${what} failed (HTTP ${response.status}): ${providerMessage(text)}`
-    );
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
   }
-  return ok(response);
+  return ok(bytes);
+}
+
+function tooLarge(what: string, size: number, maxBytes: number): string {
+  return `${what}: the reply is ${(size / 1024 / 1024).toFixed(1)} MB or more; the limit is ${(maxBytes / 1024 / 1024).toFixed(0)} MB.`;
+}
+
+/** A body as text, read with the same cap as readBytes. */
+async function readText(
+  response: Response,
+  what: string,
+  maxBytes: number,
+  truncate = false
+): Promise<Result<string>> {
+  const bytes = await readBytes(response, what, maxBytes, truncate);
+  return bytes.ok ? ok(new TextDecoder().decode(bytes.value)) : bytes;
 }
 
 /** The useful part of an error body: `error`/`message` from JSON, else the text, shortened. */
@@ -74,7 +218,9 @@ export async function readJson(
   response: Response,
   what: string
 ): Promise<Result<unknown>> {
-  const text: string = await response.text().catch(() => '');
+  const read = await readText(response, what, MAX_TEXT_BYTES);
+  if (!read.ok) return read;
+  const text: string = read.value;
   try {
     return ok(JSON.parse(text) as unknown);
   } catch {

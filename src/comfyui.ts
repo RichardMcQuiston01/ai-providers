@@ -1,4 +1,4 @@
-import { callProvider, readJson } from './http.js';
+import { callProvider, readBytes, readJson } from './http.js';
 import {
   promptWithInstructions,
   type AiImage,
@@ -151,6 +151,10 @@ interface OutputImage {
  * Reads one prompt's history entry: still running (null), failed (an error
  * with ComfyUI's message), or the first saved output image.
  */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function readHistory(
   body: unknown,
   promptId: string
@@ -162,22 +166,25 @@ export function readHistory(
           completed?: unknown;
           messages?: unknown;
         };
-        outputs?: Record<string, { images?: unknown }>;
+        outputs?: Record<string, unknown>;
       }
     | undefined;
   if (entry === undefined) return ok(null);
+  if (!isRecord(entry)) {
+    return err('ComfyUI returned a history entry that is not an object');
+  }
   if (entry.status?.status_str === 'error') {
     const messages: unknown = entry.status.messages;
     const detail: string = Array.isArray(messages)
       ? messages
-          .filter((item): item is [string, Record<string, unknown>] =>
-            Array.isArray(item)
+          .filter(
+            (item): item is [string, unknown] =>
+              Array.isArray(item) && item[0] === 'execution_error'
           )
-          .filter(([kind]) => kind === 'execution_error')
-          .map(
-            ([, data]) =>
-              `${String(data['node_type'] ?? 'a node')}: ${String(data['exception_message'] ?? 'failed')}`
-          )
+          .map(([, data]) => {
+            const fields: Record<string, unknown> = isRecord(data) ? data : {};
+            return `${String(fields['node_type'] ?? 'a node')}: ${String(fields['exception_message'] ?? 'failed')}`;
+          })
           .join('; ')
       : '';
     return err(
@@ -186,13 +193,14 @@ export function readHistory(
   }
   const images: OutputImage[] = [];
   for (const output of Object.values(entry.outputs ?? {})) {
-    if (!Array.isArray(output.images)) continue;
-    for (const image of output.images as Array<Partial<OutputImage>>) {
-      if (typeof image.filename === 'string') {
+    if (!isRecord(output) || !Array.isArray(output['images'])) continue;
+    for (const image of output['images'] as unknown[]) {
+      if (isRecord(image) && typeof image['filename'] === 'string') {
         images.push({
-          filename: image.filename,
-          subfolder: typeof image.subfolder === 'string' ? image.subfolder : '',
-          type: typeof image.type === 'string' ? image.type : 'output',
+          filename: image['filename'],
+          subfolder:
+            typeof image['subfolder'] === 'string' ? image['subfolder'] : '',
+          type: typeof image['type'] === 'string' ? image['type'] : 'output',
         });
       }
     }
@@ -483,13 +491,14 @@ export class ComfyUiImageGenerator implements ImageGenerator {
       signal
     );
     if (!response.ok) return response;
-    const data = new Uint8Array(await response.value.arrayBuffer());
+    const bytes = await readBytes(
+      response.value,
+      what,
+      MAX_COMFYUI_OUTPUT_BYTES
+    );
+    if (!bytes.ok) return bytes;
+    const data: Uint8Array = bytes.value;
     if (data.length === 0) return err(`${what}: the image is empty`);
-    if (data.length > MAX_COMFYUI_OUTPUT_BYTES) {
-      return err(
-        `${what}: the image is ${(data.length / 1024 / 1024).toFixed(1)} MB; the limit is ${MAX_COMFYUI_OUTPUT_BYTES / 1024 / 1024} MB.`
-      );
-    }
     const contentType: string =
       response.value.headers.get('content-type') ?? '';
     const mimeType: string = (contentType.split(';')[0] ?? '').trim();

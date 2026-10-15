@@ -35,6 +35,12 @@ Design:
   `{ ok: true, value } | { ok: false, error }`. Errors are specific: they
   name the provider, the model or workflow, the HTTP status and the
   provider's own message.
+- **No surprise redirects.** Provider calls ask `fetch` not to follow
+  redirects (a redirect would carry your prompt and image to another
+  address), so a redirect comes back as an error naming where it pointed.
+  The one exception is Replicate's output download, which follows a
+  redirect only to another `replicate.delivery` address. Reply bodies are
+  read with a size cap, and a bad `timeoutMs` is an error, not an exception.
 - **Providers only generate.** Prompt rules, output checks and the decision
   to use a result stay in your app, so swapping providers can't weaken
   them.
