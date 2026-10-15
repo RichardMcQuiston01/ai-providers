@@ -10,12 +10,13 @@ import {
   type ChatEndpoint,
   type OpenAiOptions,
 } from './openai.js';
-import type {
-  AiImage,
-  FetchLike,
-  ImageGenerator,
-  ImageRequest,
-  ImageResult,
+import {
+  promptWithInstructions,
+  type AiImage,
+  type FetchLike,
+  type ImageGenerator,
+  type ImageRequest,
+  type ImageResult,
 } from './port.js';
 import { err, ok, type Result } from './result.js';
 
@@ -136,12 +137,11 @@ export class GrokImageGenerator implements ImageGenerator {
     if (request.signal?.aborted === true) return err(`${what} was cancelled`);
     const image = toDataUri(first);
     if (!image.ok) return image;
-    const instructions: string = request.instructions.trim();
     // The edit endpoint has no system prompt, so the rules lead the prompt.
-    const prompt: string =
-      instructions === ''
-        ? request.prompt
-        : `${instructions}\n\n${request.prompt}`;
+    const prompt: string = promptWithInstructions(
+      request.instructions,
+      request.prompt
+    );
 
     const response = await callProvider(
       this.#fetch,

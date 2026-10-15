@@ -68,3 +68,15 @@ export type FetchLike = (
   input: string,
   init?: RequestInit
 ) => Promise<Response>;
+
+/**
+ * The prompt for a provider that has no system prompt: non-empty
+ * `instructions` lead it, so the rules reach the model as part of the text.
+ */
+export function promptWithInstructions(
+  instructions: string,
+  prompt: string
+): string {
+  const rules: string = instructions.trim();
+  return rules === '' ? prompt : `${rules}\n\n${prompt}`;
+}
