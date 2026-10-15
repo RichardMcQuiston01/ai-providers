@@ -1,6 +1,7 @@
 import type OpenAI from 'openai';
 
 import { DEFAULT_AI_TIMEOUT_MS, fromBase64, toBase64 } from './http.js';
+import { IMAGE_TYPES, checkImageOutput } from './images.js';
 import {
   promptWithInstructions,
   type AiImage,
@@ -40,12 +41,6 @@ export const OPENAI_ENDPOINT: ChatEndpoint = {
   defaultTextModel: DEFAULT_OPENAI_TEXT_MODEL,
   keyHelp: 'create one at platform.openai.com',
 };
-
-const OPENAI_IMAGE_TYPES: ReadonlySet<string> = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-]);
 
 const IMAGE_EXTENSIONS: Readonly<Record<string, string>> = {
   'image/png': 'png',
@@ -135,7 +130,7 @@ function checkImage(
   label: string,
   endpoint: ChatEndpoint
 ): Result<AiImage> {
-  if (!OPENAI_IMAGE_TYPES.has(image.mimeType)) {
+  if (!IMAGE_TYPES.has(image.mimeType)) {
     return err(
       `${label} is ${image.mimeType}; ${endpoint.label} takes PNG, JPEG or WebP.`
     );
@@ -404,9 +399,8 @@ export class OpenAiImageGenerator implements ImageGenerator {
     if (data === null || data.length === 0) {
       return err(`${what} returned image data that isn't valid base64`);
     }
-    return ok({
-      image: { mimeType: `image/${response.output_format ?? 'png'}`, data },
-      notes: null,
-    });
+    const output = checkImageOutput(data, what);
+    if (!output.ok) return output;
+    return ok({ image: output.value, notes: null });
   }
 }

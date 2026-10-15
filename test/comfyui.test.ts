@@ -10,7 +10,7 @@ import {
   parseWorkflow,
   readHistory,
 } from '../src/index.js';
-import { fakeFetch, json } from './helpers.js';
+import { fakeFetch, json, PNG_OUTPUT } from './helpers.js';
 
 const PHOTO = {
   mimeType: 'image/png',
@@ -207,7 +207,7 @@ void describe('ComfyUiImageGenerator', () => {
           }),
       ],
       'GET /view': () =>
-        new Response(new Uint8Array([1, 2, 3]), {
+        new Response(PNG_OUTPUT, {
           headers: { 'content-type': 'image/png' },
         }),
     });
@@ -230,7 +230,7 @@ void describe('ComfyUiImageGenerator', () => {
       mode: null,
     });
     assert.ok(result.ok, JSON.stringify(result));
-    assert.deepEqual([...result.value.image.data], [1, 2, 3]);
+    assert.deepEqual([...result.value.image.data], [...PNG_OUTPUT]);
     assert.equal(result.value.image.mimeType, 'image/png');
     assert.match(result.value.notes ?? '', /touch-up/);
     assert.deepEqual(slept, [1000]);
@@ -341,6 +341,46 @@ void describe('ComfyUiImageGenerator', () => {
   });
 });
 
+void describe('ComfyUiImageGenerator output types', () => {
+  const run = async (body: BodyInit, contentType: string) => {
+    const fake = fakeFetch({
+      'POST /upload/image': json({ name: 'in.png' }),
+      'POST /prompt': json({ prompt_id: 'p1' }),
+      'GET /history/p1': json({
+        p1: {
+          status: { completed: true },
+          outputs: { '4': { images: [{ filename: 'out.png' }] } },
+        },
+      }),
+      'GET /view': () =>
+        new Response(body, { headers: { 'content-type': contentType } }),
+    });
+    return new ComfyUiImageGenerator({
+      workflows: memoryWorkflowSource({ a: JSON.stringify(WORKFLOW) }),
+      fetch: fake.fetch,
+    }).generateImage({
+      instructions: '',
+      prompt: 'p',
+      images: [PHOTO],
+      mode: null,
+    });
+  };
+
+  void it('takes the type from the bytes, not Content-Type or the file name', async () => {
+    const asPng = await run(PNG_OUTPUT, 'image/svg+xml');
+    assert.equal(asPng.ok && asPng.value.image.mimeType, 'image/png');
+    const svg = await run(
+      '<svg xmlns="http://www.w3.org/2000/svg"/>',
+      'image/svg+xml'
+    );
+    assert.equal(svg.ok, false);
+    assert.match(
+      (svg as { error: string }).error,
+      /isn't a PNG, JPEG or WebP image/
+    );
+  });
+});
+
 void describe('ComfyUiImageGenerator instructions and cancellation', () => {
   const request = (overrides: Partial<ImageRequest> = {}): ImageRequest => ({
     instructions: '',
@@ -381,7 +421,7 @@ void describe('ComfyUiImageGenerator instructions and cancellation', () => {
           outputs: { '4': { images: [{ filename: 'o.png' }] } },
         },
       }),
-      'GET /view': new Response(new Uint8Array([1])),
+      'GET /view': new Response(PNG_OUTPUT),
     });
     const result = await generator.generateImage(
       request({ instructions: '  ' })

@@ -1,11 +1,11 @@
 import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
-  providerMessage,
   readBytes,
   readJson,
   toBase64,
 } from './http.js';
+import { IMAGE_TYPES, checkImageOutput } from './images.js';
 import {
   promptWithInstructions,
   type AiImage,
@@ -27,19 +27,6 @@ const POLL_INTERVAL_MS = 2000;
 /** Replicate holds the first request open this long, so quick runs need no polling. */
 const WAIT_SECONDS = 30;
 const MAX_OUTPUT_BYTES = 25 * 1024 * 1024;
-
-const REPLICATE_IMAGE_TYPES: ReadonlySet<string> = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-]);
-
-const TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  webp: 'image/webp',
-};
 
 export interface ReplicateImageOptions {
   /** A Replicate API token. Passed in, never read from the environment. */
@@ -93,7 +80,7 @@ function isAborted(signal: AbortSignal | undefined): boolean {
 }
 
 function toDataUri(image: AiImage, label: string): Result<string> {
-  if (!REPLICATE_IMAGE_TYPES.has(image.mimeType)) {
+  if (!IMAGE_TYPES.has(image.mimeType)) {
     return err(
       `${label} is ${image.mimeType}; Replicate models here take PNG, JPEG or WebP.`
     );
@@ -388,15 +375,6 @@ export class ReplicateImageGenerator implements ImageGenerator {
     if (!bytes.ok) return bytes;
     const data: Uint8Array = bytes.value;
     if (data.length === 0) return err(`${label}: the image is empty`);
-    const extension: string = new URL(url).pathname.split('.').pop() ?? '';
-    const mimeType: string | undefined =
-      TYPES_BY_EXTENSION[extension.toLowerCase()] ??
-      response.value.headers.get('content-type')?.split(';')[0]?.trim();
-    if (mimeType === undefined || !REPLICATE_IMAGE_TYPES.has(mimeType)) {
-      return err(
-        `${label}: expected a PNG, JPEG or WebP image but got ${mimeType ?? 'an unknown type'}: ${providerMessage(new TextDecoder().decode(data.subarray(0, 200)))}`
-      );
-    }
-    return ok({ mimeType, data });
+    return checkImageOutput(data, label);
   }
 }

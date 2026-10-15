@@ -1,5 +1,6 @@
 import { checkProviderHost } from './hosts.js';
 import { callProvider, readBytes, readJson } from './http.js';
+import { checkImageOutput } from './images.js';
 import {
   promptWithInstructions,
   type AiImage,
@@ -522,25 +523,10 @@ export class ComfyUiImageGenerator implements ImageGenerator {
     if (!bytes.ok) return bytes;
     const data: Uint8Array = bytes.value;
     if (data.length === 0) return err(`${what}: the image is empty`);
-    const contentType: string =
-      response.value.headers.get('content-type') ?? '';
-    const mimeType: string = (contentType.split(';')[0] ?? '').trim();
-    return ok({
-      mimeType: mimeType.startsWith('image/')
-        ? mimeType
-        : guessMime(output.filename),
-      data,
-    });
+    return checkImageOutput(data, what);
   }
 }
 
 function isAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
-}
-
-function guessMime(filename: string): string {
-  const lower: string = filename.toLowerCase();
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-  if (lower.endsWith('.webp')) return 'image/webp';
-  return 'image/png';
 }

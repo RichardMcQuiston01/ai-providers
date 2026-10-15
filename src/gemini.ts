@@ -1,4 +1,5 @@
 import { DEFAULT_AI_TIMEOUT_MS, fromBase64, toBase64 } from './http.js';
+import { IMAGE_TYPES, checkImageOutput } from './images.js';
 import type {
   AiImage,
   ImageGenerator,
@@ -14,12 +15,6 @@ import { describeUnknownError, err, ok, type Result } from './result.js';
 export const GEMINI_PACKAGE = '@richardmcquiston01/gemini-icon-gen';
 export const DEFAULT_GEMINI_TEXT_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
-
-const GEMINI_IMAGE_TYPES: ReadonlySet<string> = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-]);
 
 interface GeminiInlineImage {
   data: string;
@@ -133,7 +128,7 @@ function checkKey(apiKey: string): Result<string> {
 }
 
 function toInline(image: AiImage, label: string): Result<GeminiInlineImage> {
-  if (!GEMINI_IMAGE_TYPES.has(image.mimeType)) {
+  if (!IMAGE_TYPES.has(image.mimeType)) {
     return err(
       `${label} is ${image.mimeType}; Gemini takes PNG, JPEG or WebP.`
     );
@@ -260,7 +255,7 @@ export class GeminiImageGenerator implements ImageGenerator {
       request.signal
     );
     if (!reply.ok) return reply;
-    const { success, imageData, mimeType, text, error } = reply.value;
+    const { success, imageData, text, error } = reply.value;
     if (!success || imageData === undefined) {
       return err(`${what}: ${error ?? 'no image in the reply'}`);
     }
@@ -268,9 +263,8 @@ export class GeminiImageGenerator implements ImageGenerator {
     if (data === null || data.length === 0) {
       return err(`${what} returned image data that isn't valid base64`);
     }
-    return ok({
-      image: { mimeType: mimeType ?? 'image/png', data },
-      notes: text?.trim() || null,
-    });
+    const output = checkImageOutput(data, what);
+    if (!output.ok) return output;
+    return ok({ image: output.value, notes: text?.trim() || null });
   }
 }

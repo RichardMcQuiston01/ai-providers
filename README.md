@@ -41,6 +41,11 @@ Design:
   The one exception is Replicate's output download, which follows a
   redirect only to another `replicate.delivery` address. Reply bodies are
   read with a size cap, and a bad `timeoutMs` is an error, not an exception.
+- **Returned images are checked.** Every image provider returns PNG, JPEG
+  or WebP only, and `mimeType` comes from the image's own bytes, never from
+  a type the provider or server declared. Anything else (SVG, GIF, HTML, a
+  truncated file) is an error. `sniffImageType` and `checkImageOutput` are
+  exported for your own use.
 - **Providers only generate.** Prompt rules, output checks and the decision
   to use a result stay in your app, so swapping providers can't weaken
   them.
