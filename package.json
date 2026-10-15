@@ -1,7 +1,7 @@
 {
   "name": "@richardmcquiston01/ai-providers",
   "version": "0.3.0",
-  "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with local Ollama and ComfyUI adapters and Gemini, Claude and OpenAI (optional peers). Functions return Results instead of throwing; the core is runtime-neutral.",
+  "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with Ollama, ComfyUI and Replicate adapters and Gemini, Claude and OpenAI (optional peers). Functions return Results instead of throwing; the core is runtime-neutral.",
   "keywords": [
     "ai",
     "llm",
@@ -9,6 +9,7 @@
     "gemini",
     "claude",
     "openai",
+    "replicate",
     "comfyui",
     "image-generation",
     "text-generation",
@@ -50,6 +51,9 @@
       ],
       "openai": [
         "./dist/openai.d.cts"
+      ],
+      "replicate": [
+        "./dist/replicate.d.cts"
       ]
     }
   },
@@ -112,6 +116,16 @@
       "require": {
         "types": "./dist/openai.d.cts",
         "default": "./dist/openai.cjs"
+      }
+    },
+    "./replicate": {
+      "import": {
+        "types": "./dist/replicate.d.ts",
+        "default": "./dist/replicate.js"
+      },
+      "require": {
+        "types": "./dist/replicate.d.cts",
+        "default": "./dist/replicate.cjs"
       }
     },
     "./node": {
