@@ -6,12 +6,13 @@ import {
   toBase64,
 } from './http.js';
 import { IMAGE_TYPES, checkImageOutput } from './images.js';
-import type {
-  AiImage,
-  FetchLike,
-  ImageGenerator,
-  ImageRequest,
-  ImageResult,
+import {
+  promptWithInstructions,
+  type AiImage,
+  type FetchLike,
+  type ImageGenerator,
+  type ImageRequest,
+  type ImageResult,
 } from './port.js';
 import { err, ok, type Result } from './result.js';
 
@@ -210,12 +211,11 @@ export class ReplicateImageGenerator implements ImageGenerator {
       if (!uri.ok) return uri;
       references.push(uri.value);
     }
-    const instructions: string = request.instructions.trim();
     // Replicate models take no system prompt, so the rules lead the prompt.
-    const prompt: string =
-      instructions === ''
-        ? request.prompt
-        : `${instructions}\n\n${request.prompt}`;
+    const prompt: string = promptWithInstructions(
+      request.instructions,
+      request.prompt
+    );
 
     // The run's clock starts before the create request, which can itself be
     // held open for up to WAIT_SECONDS.

@@ -2,14 +2,15 @@ import type OpenAI from 'openai';
 
 import { DEFAULT_AI_TIMEOUT_MS, fromBase64, toBase64 } from './http.js';
 import { IMAGE_TYPES, checkImageOutput } from './images.js';
-import type {
-  AiImage,
-  ImageGenerator,
-  ImageRequest,
-  ImageResult,
-  TextGenerator,
-  TextRequest,
-  TextResult,
+import {
+  promptWithInstructions,
+  type AiImage,
+  type ImageGenerator,
+  type ImageRequest,
+  type ImageResult,
+  type TextGenerator,
+  type TextRequest,
+  type TextResult,
 } from './port.js';
 import { describeUnknownError, err, ok, type Result } from './result.js';
 
@@ -358,12 +359,11 @@ export class OpenAiImageGenerator implements ImageGenerator {
       key.value,
       this.#timeoutMs
     );
-    const instructions: string = request.instructions.trim();
     // images.edit takes no system prompt, so the rules lead the prompt.
-    const prompt: string =
-      instructions === ''
-        ? request.prompt
-        : `${instructions}\n\n${request.prompt}`;
+    const prompt: string = promptWithInstructions(
+      request.instructions,
+      request.prompt
+    );
 
     let response: OpenAI.ImagesResponse;
     try {

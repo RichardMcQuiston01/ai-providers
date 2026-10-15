@@ -99,11 +99,11 @@ Pass `images` to send pictures to a vision model.
    format, which is refused with a hint.
 3. In the exported JSON, set these placeholders:
 
-   | Placeholder         | Where                                      | Filled with                 |
-   | ------------------- | ------------------------------------------ | --------------------------- |
-   | `"{{INPUT_IMAGE}}"` | the LoadImage node's `image` (required)    | the uploaded image          |
-   | `{{PROMPT}}`        | anywhere inside a text value               | `request.prompt`            |
-   | `"{{SEED}}"`        | a sampler's `seed` (optional, whole value) | a random number on each run |
+   | Placeholder         | Where                                      | Filled with                                                                                               |
+   | ------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+   | `"{{INPUT_IMAGE}}"` | the LoadImage node's `image` (required)    | the uploaded image                                                                                        |
+   | `{{PROMPT}}`        | anywhere inside a text value               | `request.instructions`, a blank line, then `request.prompt` (just the prompt when instructions are blank) |
+   | `"{{SEED}}"`        | a sampler's `seed` (optional, whole value) | a random number on each run                                                                               |
 
 ```ts
 import { ComfyUiImageGenerator } from '@richardmcquiston01/ai-providers';

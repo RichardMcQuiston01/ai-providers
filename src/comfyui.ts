@@ -1,12 +1,13 @@
 import { checkProviderHost } from './hosts.js';
 import { callProvider, readBytes, readJson } from './http.js';
 import { checkImageOutput } from './images.js';
-import type {
-  AiImage,
-  FetchLike,
-  ImageGenerator,
-  ImageRequest,
-  ImageResult,
+import {
+  promptWithInstructions,
+  type AiImage,
+  type FetchLike,
+  type ImageGenerator,
+  type ImageRequest,
+  type ImageResult,
 } from './port.js';
 import { describeUnknownError, err, ok, type Result } from './result.js';
 
@@ -315,7 +316,7 @@ export class ComfyUiImageGenerator implements ImageGenerator {
     if (!uploaded.ok) return uploaded;
     const filled: ApiWorkflow = fillWorkflow(workflow.value, {
       inputImage: uploaded.value,
-      prompt: request.prompt,
+      prompt: promptWithInstructions(request.instructions, request.prompt),
       seed: this.randomSeed(),
     });
 
@@ -403,7 +404,10 @@ export class ComfyUiImageGenerator implements ImageGenerator {
     const deadline: number = this.now() + this.runTimeoutMs;
     const what = `ComfyUI workflow "${mode}"`;
     while (this.now() < deadline) {
-      if (signal?.aborted === true) return err(`${what} was cancelled`);
+      if (isAborted(signal)) {
+        await this.cancelRun(promptId);
+        return err(`${what} was cancelled`);
+      }
       const response = await callProvider(
         this.fetchImpl,
         `${this.host}/history/${encodeURIComponent(promptId)}`,
@@ -412,17 +416,84 @@ export class ComfyUiImageGenerator implements ImageGenerator {
         REQUEST_TIMEOUT_MS,
         signal
       );
-      if (!response.ok) return response;
+      if (!response.ok) {
+        if (isAborted(signal)) await this.cancelRun(promptId);
+        return response;
+      }
       const body = await readJson(response.value, what);
       if (!body.ok) return body;
       const state = readHistory(body.value, promptId);
       if (!state.ok) return err(`${what}: ${state.error}`);
       if (state.value !== null) return ok(state.value);
-      await this.sleep(POLL_INTERVAL_MS);
+      await this.pause(POLL_INTERVAL_MS, signal);
     }
+    await this.cancelRun(promptId);
     return err(
-      `${what} didn't finish within ${Math.round(this.runTimeoutMs / 1000)} s; it may still be running in ComfyUI.`
+      `${what} didn't finish within ${Math.round(this.runTimeoutMs / 1000)} s, so ComfyUI was asked to stop it.`
     );
+  }
+
+  /** Waits `ms`, or less if `signal` aborts first. */
+  private async pause(ms: number, signal?: AbortSignal): Promise<void> {
+    if (signal === undefined) return this.sleep(ms);
+    let onAbort: () => void = () => undefined;
+    const aborted = new Promise<void>((resolve) => {
+      onAbort = () => resolve();
+      if (signal.aborted) resolve();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      await Promise.race([this.sleep(ms), aborted]);
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  /**
+   * Stops our run so a caller that gave up doesn't leave the GPU busy: a
+   * queued prompt is deleted from the queue, a running one is interrupted.
+   * Only a prompt found in ComfyUI's queue is touched (interrupt stops
+   * whatever is running, which could be someone else's job). Best effort:
+   * a failure here must not hide the original error.
+   */
+  private async cancelRun(promptId: string): Promise<void> {
+    const queue = await callProvider(
+      this.fetchImpl,
+      `${this.host}/queue`,
+      { method: 'GET' },
+      'Reading the ComfyUI queue',
+      REQUEST_TIMEOUT_MS
+    );
+    if (!queue.ok) return;
+    const body = await readJson(queue.value, 'Reading the ComfyUI queue');
+    if (!body.ok || typeof body.value !== 'object' || body.value === null) {
+      return;
+    }
+    const queueState = body.value as Record<string, unknown>;
+    const holds = (list: unknown): boolean =>
+      Array.isArray(list) &&
+      list.some((item) => Array.isArray(item) && item[1] === promptId);
+    if (holds(queueState['queue_running'])) {
+      await callProvider(
+        this.fetchImpl,
+        `${this.host}/interrupt`,
+        { method: 'POST' },
+        'Interrupting the ComfyUI run',
+        REQUEST_TIMEOUT_MS
+      );
+    } else if (holds(queueState['queue_pending'])) {
+      await callProvider(
+        this.fetchImpl,
+        `${this.host}/queue`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ delete: [promptId] }),
+        },
+        'Removing the ComfyUI run from the queue',
+        REQUEST_TIMEOUT_MS
+      );
+    }
   }
 
   private async download(
@@ -454,4 +525,8 @@ export class ComfyUiImageGenerator implements ImageGenerator {
     if (data.length === 0) return err(`${what}: the image is empty`);
     return checkImageOutput(data, what);
   }
+}
+
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
 }
