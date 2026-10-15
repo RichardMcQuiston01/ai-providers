@@ -18,5 +18,9 @@ Replicate image edits (`./replicate`).
 Each new provider follows "Adding a provider" in `CLAUDE.md`: its own
 subpath, tests against a fake `fetch`, and a changeset.
 
+ChatGPT: the GPT models behind ChatGPT are already available through
+`./openai` with an API key. A ChatGPT plan itself has no public API, so it
+can't be a provider; API use is billed separately from the plan.
+
 Not planned: streaming, chat history, or tool use. This package covers
 one-shot "turn this into text or an image" tasks.
