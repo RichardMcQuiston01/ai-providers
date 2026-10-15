@@ -140,6 +140,47 @@ void describe('ComfyUI workflows', () => {
   });
 });
 
+void describe('ComfyUiImageGenerator host check', () => {
+  void it('refuses a remote or malformed host before reading workflows or sending anything', async () => {
+    for (const host of [
+      'https://example.com',
+      'nope',
+      'http://u:p@127.0.0.1:8188',
+    ]) {
+      const fake = fakeFetch({});
+      const result = await new ComfyUiImageGenerator({
+        workflows: memoryWorkflowSource({ a: JSON.stringify(WORKFLOW) }),
+        host,
+        fetch: fake.fetch,
+      }).generateImage({
+        instructions: '',
+        prompt: 'p',
+        images: [{ mimeType: 'image/png', data: new Uint8Array([1]) }],
+        mode: null,
+      });
+      assert.equal(result.ok, false, host);
+      assert.match((result as { error: string }).error, /^The ComfyUI host /);
+      assert.equal(fake.calls.length, 0, host);
+    }
+  });
+
+  void it('accepts a host on the allow list', async () => {
+    const fake = fakeFetch({ 'POST /upload/image': json({}, 500) });
+    await new ComfyUiImageGenerator({
+      workflows: memoryWorkflowSource({ a: JSON.stringify(WORKFLOW) }),
+      host: 'http://gpu.lan:8188',
+      allowedHosts: ['gpu.lan'],
+      fetch: fake.fetch,
+    }).generateImage({
+      instructions: '',
+      prompt: 'p',
+      images: [{ mimeType: 'image/png', data: new Uint8Array([1]) }],
+      mode: null,
+    });
+    assert.equal(fake.calls[0]?.url.origin, 'http://gpu.lan:8188');
+  });
+});
+
 void describe('ComfyUiImageGenerator', () => {
   void it('uploads, queues the filled workflow, waits, and downloads the output', async () => {
     const fake = fakeFetch({
