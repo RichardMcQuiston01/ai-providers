@@ -35,6 +35,12 @@ Design:
   `{ ok: true, value } | { ok: false, error }`. Errors are specific: they
   name the provider, the model or workflow, the HTTP status and the
   provider's own message.
+- **No surprise redirects.** Provider calls ask `fetch` not to follow
+  redirects (a redirect would carry your prompt and image to another
+  address), so a redirect comes back as an error naming where it pointed.
+  The one exception is Replicate's output download, which follows a
+  redirect only to another `replicate.delivery` address. Reply bodies are
+  read with a size cap, and a bad `timeoutMs` is an error, not an exception.
 - **Returned images are checked.** Every image provider returns PNG, JPEG
   or WebP only, and `mimeType` comes from the image's own bytes, never from
   a type the provider or server declared. Anything else (SVG, GIF, HTML, a
@@ -43,8 +49,10 @@ Design:
 - **Providers only generate.** Prompt rules, output checks and the decision
   to use a result stay in your app, so swapping providers can't weaken
   them.
-- **Local by default.** `checkProviderHost` accepts only this machine,
-  unless a host is on your allow list.
+- **Local by default.** The Ollama and ComfyUI generators run
+  `checkProviderHost` on their `host`: only this machine is accepted, unless
+  the host is in `allowedHosts`. A URL with a username or password is
+  refused, and error messages never repeat the URL you gave.
 - **Runtime-neutral.** The main entry runs in Node 20.3+, Bun and browsers,
   and ships as ESM and CommonJS with types. The only Node-specific code,
   reading workflows from a folder, is in the `./node` subpath.
@@ -59,17 +67,17 @@ bun add @richardmcquiston01/ai-providers
 
 ```ts
 import {
-  checkProviderHost,
   OllamaTextGenerator,
+  parseAllowedHosts,
   type TextGenerator,
 } from '@richardmcquiston01/ai-providers';
 
-const host = checkProviderHost('OLLAMA_HOST', 'http://127.0.0.1:11434');
-if (!host.ok) throw new Error(host.error);
-
+// The host defaults to http://127.0.0.1:11434. Anything else must be listed
+// in allowedHosts, or generateText returns an error before sending anything.
 const text: TextGenerator = new OllamaTextGenerator({
-  host: host.value,
   model: 'llama3.2',
+  host: 'http://gpu-box:11434',
+  allowedHosts: parseAllowedHosts('gpu-box'),
 });
 
 const result = await text.generateText({

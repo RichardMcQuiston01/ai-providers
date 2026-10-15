@@ -246,6 +246,68 @@ void describe('ReplicateImageGenerator', () => {
     assert.match(errorOf(svg), /isn't a PNG, JPEG or WebP image/);
   });
 
+  void it('follows a redirect only to replicate.delivery and counts the create request against the run time', async () => {
+    const good = fakeFetch({
+      [CREATE]: prediction('succeeded', { output: OUTPUT_URL }),
+      'GET /xezq/abc/out.png': () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://cdn.replicate.delivery/moved/out.png' },
+        }),
+      'GET /moved/out.png': image,
+    });
+    const followed = await new ReplicateImageGenerator({
+      apiKey: KEY,
+      fetch: good.fetch,
+    }).generateImage(request);
+    assert.equal(followed.ok, true);
+
+    const bad = fakeFetch({
+      [CREATE]: prediction('succeeded', { output: OUTPUT_URL }),
+      'GET /xezq/abc/out.png': () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: 'http://169.254.169.254/latest/meta-data' },
+        }),
+    });
+    const refused = await new ReplicateImageGenerator({
+      apiKey: KEY,
+      fetch: bad.fetch,
+    }).generateImage(request);
+    assert.match(
+      errorOf(refused),
+      /isn't replicate\.delivery; it was not downloaded/
+    );
+    assert.equal(bad.calls.length, 2);
+
+    // The create request takes 4 s of a 5 s budget, so one poll interval is too much.
+    let clock = 0;
+    const slow = fakeFetch({
+      [CREATE]: () => {
+        clock += 4000;
+        return prediction('processing');
+      },
+      'GET /v1/predictions/p1': () => prediction('processing'),
+      'POST /v1/predictions/p1/cancel': () => prediction('canceled'),
+    });
+    const late = await new ReplicateImageGenerator({
+      apiKey: KEY,
+      runTimeoutMs: 5000,
+      fetch: slow.fetch,
+      now: () => clock,
+      sleep: () => {
+        clock += 2000;
+        return Promise.resolve();
+      },
+    }).generateImage(request);
+    assert.match(errorOf(late), /didn't finish within 5 s and was cancelled/);
+    assert.equal(slow.calls.at(-1)?.url.pathname, '/v1/predictions/p1/cancel');
+    assert.equal(
+      slow.calls.filter((call) => call.init?.method === 'GET').length,
+      0
+    );
+  });
+
   void it('rejects an output that is not an image, or is missing', async () => {
     const notImage = await new ReplicateImageGenerator({
       apiKey: KEY,

@@ -1,6 +1,7 @@
 import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
+  readBytes,
   readJson,
   toBase64,
 } from './http.js';
@@ -216,6 +217,9 @@ export class ReplicateImageGenerator implements ImageGenerator {
         ? request.prompt
         : `${instructions}\n\n${request.prompt}`;
 
+    // The run's clock starts before the create request, which can itself be
+    // held open for up to WAIT_SECONDS.
+    const deadline: number = this.#now() + this.#runTimeoutMs;
     const created = await this.#create(
       model.value,
       {
@@ -233,6 +237,7 @@ export class ReplicateImageGenerator implements ImageGenerator {
     if (!created.ok) return created;
     const finished = await this.#finish(
       created.value,
+      deadline,
       apiKey,
       what,
       request.signal
@@ -287,11 +292,11 @@ export class ReplicateImageGenerator implements ImageGenerator {
   /** Polls until the prediction succeeds; cancels it on Replicate if we stop waiting. */
   async #finish(
     created: Prediction,
+    deadline: number,
     apiKey: string,
     what: string,
     signal: AbortSignal | undefined
   ): Promise<Result<Prediction>> {
-    const deadline: number = this.#now() + this.#runTimeoutMs;
     let current: Prediction = created;
     for (;;) {
       switch (current.status) {
@@ -361,16 +366,15 @@ export class ReplicateImageGenerator implements ImageGenerator {
       { method: 'GET' },
       label,
       this.#timeoutMs,
-      signal
+      signal,
+      // A redirect is followed only to another replicate.delivery URL.
+      { followRedirect: (target) => checkOutputUrl(target, what) }
     );
     if (!response.ok) return response;
-    const data = new Uint8Array(await response.value.arrayBuffer());
+    const bytes = await readBytes(response.value, label, MAX_OUTPUT_BYTES);
+    if (!bytes.ok) return bytes;
+    const data: Uint8Array = bytes.value;
     if (data.length === 0) return err(`${label}: the image is empty`);
-    if (data.length > MAX_OUTPUT_BYTES) {
-      return err(
-        `${label}: the image is ${(data.length / 1024 / 1024).toFixed(1)} MB; the limit is ${MAX_OUTPUT_BYTES / 1024 / 1024} MB.`
-      );
-    }
     return checkImageOutput(data, label);
   }
 }

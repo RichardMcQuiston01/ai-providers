@@ -1,4 +1,5 @@
-import { callProvider, readJson } from './http.js';
+import { checkProviderHost } from './hosts.js';
+import { callProvider, readBytes, readJson } from './http.js';
 import { checkImageOutput } from './images.js';
 import type {
   AiImage,
@@ -151,6 +152,10 @@ interface OutputImage {
  * Reads one prompt's history entry: still running (null), failed (an error
  * with ComfyUI's message), or the first saved output image.
  */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function readHistory(
   body: unknown,
   promptId: string
@@ -162,22 +167,25 @@ export function readHistory(
           completed?: unknown;
           messages?: unknown;
         };
-        outputs?: Record<string, { images?: unknown }>;
+        outputs?: Record<string, unknown>;
       }
     | undefined;
   if (entry === undefined) return ok(null);
+  if (!isRecord(entry)) {
+    return err('ComfyUI returned a history entry that is not an object');
+  }
   if (entry.status?.status_str === 'error') {
     const messages: unknown = entry.status.messages;
     const detail: string = Array.isArray(messages)
       ? messages
-          .filter((item): item is [string, Record<string, unknown>] =>
-            Array.isArray(item)
+          .filter(
+            (item): item is [string, unknown] =>
+              Array.isArray(item) && item[0] === 'execution_error'
           )
-          .filter(([kind]) => kind === 'execution_error')
-          .map(
-            ([, data]) =>
-              `${String(data['node_type'] ?? 'a node')}: ${String(data['exception_message'] ?? 'failed')}`
-          )
+          .map(([, data]) => {
+            const fields: Record<string, unknown> = isRecord(data) ? data : {};
+            return `${String(fields['node_type'] ?? 'a node')}: ${String(fields['exception_message'] ?? 'failed')}`;
+          })
           .join('; ')
       : '';
     return err(
@@ -186,13 +194,14 @@ export function readHistory(
   }
   const images: OutputImage[] = [];
   for (const output of Object.values(entry.outputs ?? {})) {
-    if (!Array.isArray(output.images)) continue;
-    for (const image of output.images as Array<Partial<OutputImage>>) {
-      if (typeof image.filename === 'string') {
+    if (!isRecord(output) || !Array.isArray(output['images'])) continue;
+    for (const image of output['images'] as unknown[]) {
+      if (isRecord(image) && typeof image['filename'] === 'string') {
         images.push({
-          filename: image.filename,
-          subfolder: typeof image.subfolder === 'string' ? image.subfolder : '',
-          type: typeof image.type === 'string' ? image.type : 'output',
+          filename: image['filename'],
+          subfolder:
+            typeof image['subfolder'] === 'string' ? image['subfolder'] : '',
+          type: typeof image['type'] === 'string' ? image['type'] : 'output',
         });
       }
     }
@@ -216,8 +225,16 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
 
 export interface ComfyUiImageOptions {
   readonly workflows: WorkflowSource;
-  /** Base URL; check it with checkProviderHost first. Default 127.0.0.1:8188. */
+  /**
+   * Base URL, checked with checkProviderHost: this machine unless the host
+   * is in `allowedHosts`. Default 127.0.0.1:8188. A bad host makes
+   * generateImage return an error.
+   */
   readonly host?: string;
+  /** Hosts allowed besides loopback (see parseAllowedHosts). */
+  readonly allowedHosts?: readonly string[];
+  /** What to call the allow list in messages, e.g. an env variable name. */
+  readonly allowedHostsLabel?: string;
   /** Shown as the generator's `model`, e.g. "workflows in ./comfyui". */
   readonly label?: string;
   /** Start of uploaded file names in ComfyUI's input folder. */
@@ -235,6 +252,7 @@ export class ComfyUiImageGenerator implements ImageGenerator {
   readonly provider = 'comfyui';
   readonly model: string;
   private readonly host: string;
+  private readonly hostCheck: Result<string>;
   private readonly workflows: WorkflowSource;
   private readonly uploadPrefix: string;
   private readonly runTimeoutMs: number;
@@ -245,7 +263,19 @@ export class ComfyUiImageGenerator implements ImageGenerator {
 
   constructor(options: ComfyUiImageOptions) {
     this.workflows = options.workflows;
-    this.host = (options.host ?? DEFAULT_COMFYUI_HOST).replace(/\/+$/, '');
+    this.hostCheck = checkProviderHost(
+      'The ComfyUI host',
+      options.host?.trim() || DEFAULT_COMFYUI_HOST,
+      {
+        ...(options.allowedHosts !== undefined
+          ? { allowedHosts: options.allowedHosts }
+          : {}),
+        ...(options.allowedHostsLabel !== undefined
+          ? { allowedHostsLabel: options.allowedHostsLabel }
+          : {}),
+      }
+    );
+    this.host = this.hostCheck.ok ? this.hostCheck.value : '';
     this.model = options.label ?? 'ComfyUI workflows';
     this.uploadPrefix = options.uploadPrefix ?? 'ai-providers';
     this.runTimeoutMs = options.runTimeoutMs ?? COMFYUI_RUN_TIMEOUT_MS;
@@ -263,6 +293,7 @@ export class ComfyUiImageGenerator implements ImageGenerator {
   }
 
   async generateImage(request: ImageRequest): Promise<Result<ImageResult>> {
+    if (!this.hostCheck.ok) return this.hostCheck;
     const photo: AiImage | undefined = request.images[0];
     if (photo === undefined) return err('No image was given to ComfyUI');
     const modes = await this.workflows.list();
@@ -413,13 +444,14 @@ export class ComfyUiImageGenerator implements ImageGenerator {
       signal
     );
     if (!response.ok) return response;
-    const data = new Uint8Array(await response.value.arrayBuffer());
+    const bytes = await readBytes(
+      response.value,
+      what,
+      MAX_COMFYUI_OUTPUT_BYTES
+    );
+    if (!bytes.ok) return bytes;
+    const data: Uint8Array = bytes.value;
     if (data.length === 0) return err(`${what}: the image is empty`);
-    if (data.length > MAX_COMFYUI_OUTPUT_BYTES) {
-      return err(
-        `${what}: the image is ${(data.length / 1024 / 1024).toFixed(1)} MB; the limit is ${MAX_COMFYUI_OUTPUT_BYTES / 1024 / 1024} MB.`
-      );
-    }
     return checkImageOutput(data, what);
   }
 }
