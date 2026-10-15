@@ -97,7 +97,7 @@ import { ComfyUiImageGenerator } from '@richardmcquiston01/ai-providers';
 import { directoryWorkflowSource } from '@richardmcquiston01/ai-providers/node';
 
 const image = new ComfyUiImageGenerator({
-  workflows: directoryWorkflowSource('comfyui-workflows'), // touch-up.json → mode "touch-up"
+  workflows: directoryWorkflowSource('comfyui-workflows'), // touch-up.json → mode "touch-up" (symbolic links are not followed)
   label: 'workflows in comfyui-workflows',
 });
 
