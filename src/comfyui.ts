@@ -1,3 +1,4 @@
+import { checkProviderHost } from './hosts.js';
 import { callProvider, readJson } from './http.js';
 import type {
   AiImage,
@@ -215,8 +216,16 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
 
 export interface ComfyUiImageOptions {
   readonly workflows: WorkflowSource;
-  /** Base URL; check it with checkProviderHost first. Default 127.0.0.1:8188. */
+  /**
+   * Base URL, checked with checkProviderHost: this machine unless the host
+   * is in `allowedHosts`. Default 127.0.0.1:8188. A bad host makes
+   * generateImage return an error.
+   */
   readonly host?: string;
+  /** Hosts allowed besides loopback (see parseAllowedHosts). */
+  readonly allowedHosts?: readonly string[];
+  /** What to call the allow list in messages, e.g. an env variable name. */
+  readonly allowedHostsLabel?: string;
   /** Shown as the generator's `model`, e.g. "workflows in ./comfyui". */
   readonly label?: string;
   /** Start of uploaded file names in ComfyUI's input folder. */
@@ -234,6 +243,7 @@ export class ComfyUiImageGenerator implements ImageGenerator {
   readonly provider = 'comfyui';
   readonly model: string;
   private readonly host: string;
+  private readonly hostCheck: Result<string>;
   private readonly workflows: WorkflowSource;
   private readonly uploadPrefix: string;
   private readonly runTimeoutMs: number;
@@ -244,7 +254,19 @@ export class ComfyUiImageGenerator implements ImageGenerator {
 
   constructor(options: ComfyUiImageOptions) {
     this.workflows = options.workflows;
-    this.host = (options.host ?? DEFAULT_COMFYUI_HOST).replace(/\/+$/, '');
+    this.hostCheck = checkProviderHost(
+      'The ComfyUI host',
+      options.host?.trim() || DEFAULT_COMFYUI_HOST,
+      {
+        ...(options.allowedHosts !== undefined
+          ? { allowedHosts: options.allowedHosts }
+          : {}),
+        ...(options.allowedHostsLabel !== undefined
+          ? { allowedHostsLabel: options.allowedHostsLabel }
+          : {}),
+      }
+    );
+    this.host = this.hostCheck.ok ? this.hostCheck.value : '';
     this.model = options.label ?? 'ComfyUI workflows';
     this.uploadPrefix = options.uploadPrefix ?? 'ai-providers';
     this.runTimeoutMs = options.runTimeoutMs ?? COMFYUI_RUN_TIMEOUT_MS;
@@ -262,6 +284,7 @@ export class ComfyUiImageGenerator implements ImageGenerator {
   }
 
   async generateImage(request: ImageRequest): Promise<Result<ImageResult>> {
+    if (!this.hostCheck.ok) return this.hostCheck;
     const photo: AiImage | undefined = request.images[0];
     if (photo === undefined) return err('No image was given to ComfyUI');
     const modes = await this.workflows.list();
