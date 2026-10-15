@@ -17,7 +17,28 @@ export const OPENAI_PACKAGE = 'openai';
 export const DEFAULT_OPENAI_TEXT_MODEL = 'gpt-5.5';
 export const DEFAULT_OPENAI_IMAGE_MODEL = 'gpt-image-2';
 
-const OPENAI_API_URL = 'https://api.openai.com/v1';
+/**
+ * What differs between OpenAI and the OpenAI-compatible APIs (such as xAI's)
+ * that are called through the same SDK.
+ */
+export interface ChatEndpoint {
+  /** e.g. 'openai'. */
+  readonly provider: string;
+  /** For messages, e.g. 'OpenAI'. */
+  readonly label: string;
+  readonly baseUrl: string;
+  readonly defaultTextModel: string;
+  /** Finishes "create one at …", for the missing-key and 401 messages. */
+  readonly keyHelp: string;
+}
+
+export const OPENAI_ENDPOINT: ChatEndpoint = {
+  provider: 'openai',
+  label: 'OpenAI',
+  baseUrl: 'https://api.openai.com/v1',
+  defaultTextModel: DEFAULT_OPENAI_TEXT_MODEL,
+  keyHelp: 'create one at platform.openai.com',
+};
 
 const OPENAI_IMAGE_TYPES: ReadonlySet<string> = new Set([
   'image/png',
@@ -59,24 +80,25 @@ const loadOpenAiPackage: OpenAiModuleLoader = () => import('openai');
  * not cached, so installing the package fixes it without a restart.
  */
 async function loadModule(
-  loader: OpenAiModuleLoader
+  loader: OpenAiModuleLoader,
+  endpoint: ChatEndpoint
 ): Promise<Result<OpenAiModule>> {
   try {
     return ok(await loader());
   } catch (cause: unknown) {
     return err(
-      `The OpenAI provider needs the optional package ${OPENAI_PACKAGE}; ` +
+      `The ${endpoint.label} provider needs the optional package ${OPENAI_PACKAGE}; ` +
         `install it (e.g. bun add ${OPENAI_PACKAGE}). Loading it failed: ${describeUnknownError(cause)}`,
       cause
     );
   }
 }
 
-function checkKey(apiKey: string): Result<string> {
+function checkKey(apiKey: string, endpoint: ChatEndpoint): Result<string> {
   const key: string = apiKey.trim();
   return key === ''
     ? err(
-        'No OpenAI API key is set; create one at platform.openai.com and pass it as apiKey.'
+        `No ${endpoint.label} API key is set; ${endpoint.keyHelp} and pass it as apiKey.`
       )
     : ok(key);
 }
@@ -88,12 +110,13 @@ function checkKey(apiKey: string): Result<string> {
  */
 function createClient(
   sdk: OpenAiModule,
+  endpoint: ChatEndpoint,
   apiKey: string,
   timeoutMs: number
 ): OpenAI {
   return new sdk.default({
     apiKey,
-    baseURL: OPENAI_API_URL,
+    baseURL: endpoint.baseUrl,
     organization: null,
     project: null,
     webhookSecret: null,
@@ -106,10 +129,14 @@ function isAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
 }
 
-function checkImage(image: AiImage, label: string): Result<AiImage> {
+function checkImage(
+  image: AiImage,
+  label: string,
+  endpoint: ChatEndpoint
+): Result<AiImage> {
   if (!OPENAI_IMAGE_TYPES.has(image.mimeType)) {
     return err(
-      `${label} is ${image.mimeType}; OpenAI takes PNG, JPEG or WebP.`
+      `${label} is ${image.mimeType}; ${endpoint.label} takes PNG, JPEG or WebP.`
     );
   }
   if (image.data.length === 0) return err(`${label} is empty.`);
@@ -123,11 +150,12 @@ function messageOf(cause: InstanceType<OpenAiModule['APIError']>): string {
     : cause.message.replace(new RegExp(`^${cause.status} `), '');
 }
 
-/** A specific message for an SDK error: the status, OpenAI's message, and the likely fix. */
+/** A specific message for an SDK error: the status, the provider's message, and the likely fix. */
 function describeApiError(
   sdk: OpenAiModule,
   what: string,
-  cause: unknown
+  cause: unknown,
+  endpoint: ChatEndpoint
 ): string {
   const {
     APIError,
@@ -137,7 +165,7 @@ function describeApiError(
     RateLimitError,
   } = sdk;
   if (cause instanceof AuthenticationError) {
-    return `${what} was refused (401): the API key isn't valid. Create one at platform.openai.com.`;
+    return `${what} was refused (401): the API key isn't valid; check it, or ${endpoint.keyHelp}.`;
   }
   if (cause instanceof PermissionDeniedError) {
     return `${what} was refused (403): ${messageOf(cause)}`;
@@ -160,44 +188,49 @@ function describeFailure(
   what: string,
   cause: unknown,
   timeoutMs: number,
-  signal: AbortSignal | undefined
+  signal: AbortSignal | undefined,
+  endpoint: ChatEndpoint
 ): string {
   if (isAborted(signal)) return `${what} was cancelled`;
   if (cause instanceof sdk.APIConnectionTimeoutError) {
     return `${what} took longer than ${Math.round(timeoutMs / 1000)} s and was stopped`;
   }
-  return describeApiError(sdk, what, cause);
+  return describeApiError(sdk, what, cause, endpoint);
 }
 
 /**
- * Text from OpenAI through the Chat Completions API. The request's
+ * Text through the Chat Completions API, from OpenAI or any API that speaks
+ * it (see `ChatEndpoint`). The request's
  * instructions are the system message; images go before the prompt. A
  * refusal from the model is an error carrying its explanation.
  */
-export class OpenAiTextGenerator implements TextGenerator {
-  readonly provider = 'openai';
+export class ChatCompletionsTextGenerator implements TextGenerator {
+  readonly provider: string;
   readonly model: string;
   // Runtime-private, so the key stays out of JSON, spreads and logs.
+  readonly #endpoint: ChatEndpoint;
   readonly #apiKey: string;
   readonly #timeoutMs: number;
   readonly #loader: OpenAiModuleLoader;
 
-  constructor(options: OpenAiOptions) {
+  constructor(endpoint: ChatEndpoint, options: OpenAiOptions) {
+    this.#endpoint = endpoint;
+    this.provider = endpoint.provider;
     this.#apiKey = options.apiKey;
-    this.model = options.model?.trim() || DEFAULT_OPENAI_TEXT_MODEL;
+    this.model = options.model?.trim() || endpoint.defaultTextModel;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS;
     this.#loader = options.loadModule ?? loadOpenAiPackage;
   }
 
   async generateText(request: TextRequest): Promise<Result<TextResult>> {
-    const what = `OpenAI (model "${this.model}")`;
-    const key = checkKey(this.#apiKey);
+    const what = `${this.#endpoint.label} (model "${this.model}")`;
+    const key = checkKey(this.#apiKey, this.#endpoint);
     if (!key.ok) return key;
     if (isAborted(request.signal)) return err(`${what} was cancelled`);
 
     const content: OpenAI.Chat.ChatCompletionContentPart[] = [];
     for (const [index, image] of (request.images ?? []).entries()) {
-      const checked = checkImage(image, `Image ${index + 1}`);
+      const checked = checkImage(image, `Image ${index + 1}`, this.#endpoint);
       if (!checked.ok) return checked;
       content.push({
         type: 'image_url',
@@ -208,9 +241,14 @@ export class OpenAiTextGenerator implements TextGenerator {
     }
     content.push({ type: 'text', text: request.prompt });
 
-    const sdk = await loadModule(this.#loader);
+    const sdk = await loadModule(this.#loader, this.#endpoint);
     if (!sdk.ok) return sdk;
-    const client: OpenAI = createClient(sdk.value, key.value, this.#timeoutMs);
+    const client: OpenAI = createClient(
+      sdk.value,
+      this.#endpoint,
+      key.value,
+      this.#timeoutMs
+    );
     const instructions: string = request.instructions.trim();
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       ...(instructions !== ''
@@ -232,7 +270,8 @@ export class OpenAiTextGenerator implements TextGenerator {
           what,
           cause,
           this.#timeoutMs,
-          request.signal
+          request.signal,
+          this.#endpoint
         ),
         cause
       );
@@ -251,6 +290,13 @@ export class OpenAiTextGenerator implements TextGenerator {
       );
     }
     return ok({ text });
+  }
+}
+
+/** Text from OpenAI through the Chat Completions API. */
+export class OpenAiTextGenerator extends ChatCompletionsTextGenerator {
+  constructor(options: OpenAiOptions) {
+    super(OPENAI_ENDPOINT, options);
   }
 }
 
@@ -282,7 +328,7 @@ export class OpenAiImageGenerator implements ImageGenerator {
 
   async generateImage(request: ImageRequest): Promise<Result<ImageResult>> {
     const what = `OpenAI (model "${this.model}")`;
-    const key = checkKey(this.#apiKey);
+    const key = checkKey(this.#apiKey, OPENAI_ENDPOINT);
     if (!key.ok) return key;
     if (request.mode !== null && request.mode !== this.model) {
       return err(
@@ -296,11 +342,11 @@ export class OpenAiImageGenerator implements ImageGenerator {
     for (const [index, image] of request.images.entries()) {
       const label: string =
         index === 0 ? 'The image to edit' : `Reference image ${index}`;
-      const checked = checkImage(image, label);
+      const checked = checkImage(image, label, OPENAI_ENDPOINT);
       if (!checked.ok) return checked;
     }
 
-    const sdk = await loadModule(this.#loader);
+    const sdk = await loadModule(this.#loader, OPENAI_ENDPOINT);
     if (!sdk.ok) return sdk;
     const files = await Promise.all(
       request.images.map((image, index) =>
@@ -311,7 +357,12 @@ export class OpenAiImageGenerator implements ImageGenerator {
         )
       )
     );
-    const client: OpenAI = createClient(sdk.value, key.value, this.#timeoutMs);
+    const client: OpenAI = createClient(
+      sdk.value,
+      OPENAI_ENDPOINT,
+      key.value,
+      this.#timeoutMs
+    );
     const instructions: string = request.instructions.trim();
     // images.edit takes no system prompt, so the rules lead the prompt.
     const prompt: string =
@@ -338,7 +389,8 @@ export class OpenAiImageGenerator implements ImageGenerator {
           what,
           cause,
           this.#timeoutMs,
-          request.signal
+          request.signal,
+          OPENAI_ENDPOINT
         ),
         cause
       );
