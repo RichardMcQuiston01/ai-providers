@@ -7,15 +7,30 @@ import { err, ok, type Result } from './result.js';
  * must be listed explicitly.
  */
 
-const LOOPBACK_HOSTS: ReadonlySet<string> = new Set([
-  'localhost',
-  '127.0.0.1',
-  '[::1]',
-  '::1',
-]);
+/**
+ * A host in one comparable form: lower case, one pair of IPv6 brackets and
+ * one trailing dot removed, so `[FE80::1]`, `fe80::1` and `Localhost.` match
+ * their plain spellings.
+ */
+export function normalizeHost(hostname: string): string {
+  let host: string = hostname.trim().toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  return host.endsWith('.') ? host.slice(0, -1) : host;
+}
 
+/**
+ * Loopback: `localhost`, anything in 127.0.0.0/8, `::1`, and the
+ * IPv4-mapped form of a 127 address (`::ffff:7f00:1`, which is how the URL
+ * parser writes `[::ffff:127.0.0.1]`).
+ */
 export function isLoopbackHost(hostname: string): boolean {
-  return LOOPBACK_HOSTS.has(hostname.toLowerCase());
+  const host: string = normalizeHost(hostname);
+  return (
+    host === 'localhost' ||
+    host === '::1' ||
+    /^127(\.\d{1,3}){3}$/.test(host) ||
+    /^::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}$/.test(host)
+  );
 }
 
 export interface ProviderHostOptions {
@@ -35,29 +50,35 @@ export function checkProviderHost(
   value: string,
   options: ProviderHostOptions = {}
 ): Result<string> {
-  const allowedHosts: readonly string[] = options.allowedHosts ?? [];
+  const allowedHosts: readonly string[] = (options.allowedHosts ?? []).map(
+    normalizeHost
+  );
   const label: string = options.allowedHostsLabel ?? 'the allowed hosts';
+  // Messages never repeat `value`: a pasted URL may carry a password.
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     return err(
-      `${name} "${value}" is not a URL; use e.g. http://127.0.0.1:11434`
+      `${name} is not a URL; use e.g. http://127.0.0.1:11434 (the value is not shown in case it holds a password)`
     );
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    return err(`${name} "${value}" must use http or https`);
+    return err(`${name} must use http or https, not ${url.protocol}`);
   }
-  const host: string = url.hostname.toLowerCase();
+  if (url.username !== '' || url.password !== '') {
+    return err(
+      `${name} must not contain a username or password; use ${url.origin}`
+    );
+  }
+  const host: string = normalizeHost(url.hostname);
   if (!isLoopbackHost(host) && !allowedHosts.includes(host)) {
     return err(
       `${name} points at ${host}, which isn't this machine. Use 127.0.0.1, or add ${host} to ${label} if it's your own server.`
     );
   }
   if (url.pathname !== '/' || url.search !== '' || url.hash !== '') {
-    return err(
-      `${name} "${value}" should be just the address, e.g. ${url.origin}`
-    );
+    return err(`${name} should be just the address, e.g. ${url.origin}`);
   }
   return ok(url.origin);
 }
@@ -66,6 +87,6 @@ export function checkProviderHost(
 export function parseAllowedHosts(value: string): readonly string[] {
   return value
     .split(/[\s,]+/)
-    .map((host) => host.trim().toLowerCase())
+    .map(normalizeHost)
     .filter((host) => host !== '');
 }

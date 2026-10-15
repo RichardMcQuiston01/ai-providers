@@ -44,8 +44,10 @@ Design:
 - **Providers only generate.** Prompt rules, output checks and the decision
   to use a result stay in your app, so swapping providers can't weaken
   them.
-- **Local by default.** `checkProviderHost` accepts only this machine,
-  unless a host is on your allow list.
+- **Local by default.** The Ollama and ComfyUI generators run
+  `checkProviderHost` on their `host`: only this machine is accepted, unless
+  the host is in `allowedHosts`. A URL with a username or password is
+  refused, and error messages never repeat the URL you gave.
 - **Runtime-neutral.** The main entry runs in Node 20.3+, Bun and browsers,
   and ships as ESM and CommonJS with types. The only Node-specific code,
   reading workflows from a folder, is in the `./node` subpath.
@@ -60,17 +62,17 @@ bun add @richardmcquiston01/ai-providers
 
 ```ts
 import {
-  checkProviderHost,
   OllamaTextGenerator,
+  parseAllowedHosts,
   type TextGenerator,
 } from '@richardmcquiston01/ai-providers';
 
-const host = checkProviderHost('OLLAMA_HOST', 'http://127.0.0.1:11434');
-if (!host.ok) throw new Error(host.error);
-
+// The host defaults to http://127.0.0.1:11434. Anything else must be listed
+// in allowedHosts, or generateText returns an error before sending anything.
 const text: TextGenerator = new OllamaTextGenerator({
-  host: host.value,
   model: 'llama3.2',
+  host: 'http://gpu-box:11434',
+  allowedHosts: parseAllowedHosts('gpu-box'),
 });
 
 const result = await text.generateText({
