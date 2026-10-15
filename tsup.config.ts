@@ -10,6 +10,7 @@ export default defineConfig({
     gemini: 'src/gemini.ts',
     claude: 'src/claude.ts',
     openai: 'src/openai.ts',
+    replicate: 'src/replicate.ts',
     node: 'src/node.ts',
   },
   format: ['esm', 'cjs'],

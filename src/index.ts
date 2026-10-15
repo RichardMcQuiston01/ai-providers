@@ -6,3 +6,4 @@ export * from './http.js';
 export * from './hosts.js';
 export * from './ollama.js';
 export * from './comfyui.js';
+export * from './replicate.js';

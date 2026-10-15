@@ -30,6 +30,8 @@ src/
   claude.ts     subpath ./claude: ClaudeTextGenerator over the optional peer
                 @anthropic-ai/sdk (dynamic import(), injectable loadModule; tests run
                 the real SDK against a fake fetch)
+  replicate.ts  subpath ./replicate: ReplicateImageGenerator over plain fetch (create, poll,
+                cancel on timeout/abort, download from replicate.delivery only)
   openai.ts     subpath ./openai: OpenAiTextGenerator (Chat Completions), OpenAiImageGenerator
                 (images.edit) over the optional peer openai (dynamic import(), injectable
                 loadModule; tests run the real SDK against a fake fetch)

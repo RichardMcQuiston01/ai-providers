@@ -20,6 +20,8 @@ today, a hosted API tomorrow, without changing the calling code.
   `@richardmcquiston01/gemini-icon-gen` as an optional peer dependency.
 - **Claude** (`ClaudeTextGenerator`): text with Anthropic's Claude API,
   using the official `@anthropic-ai/sdk` as an optional peer dependency.
+- **Replicate** (`ReplicateImageGenerator`): image edits with any Replicate
+  image model, over plain `fetch` (no SDK needed).
 - **OpenAI** (`OpenAiTextGenerator`, `OpenAiImageGenerator`): captions and
   photo edits with OpenAI's API, using the official `openai` package as an
   optional peer dependency.
@@ -191,6 +193,43 @@ const reply = await text.generateText({
 - Without the SDK installed, it returns an error naming the package. The
   `./claude` subpath is kept out of the main entry.
 
+### Image edits with Replicate
+
+Replicate is a hosted API with its own token (create one at
+replicate.com/account/api-tokens). It needs no extra package; it runs on
+`fetch`, so the main entry and the `./replicate` subpath both export it.
+
+```ts
+import { ReplicateImageGenerator } from '@richardmcquiston01/ai-providers/replicate';
+
+const apiKey: string = env.REPLICATE_API_TOKEN; // your app reads the token; the package never does
+
+// black-forest-labs/flux-kontext-pro unless you pass model
+const images = new ReplicateImageGenerator({ apiKey });
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- `model` is `owner/name` (its latest version) or `owner/name:version`.
+- Models name their inputs differently. The defaults are `prompt` and
+  `input_image`; set `promptInput` and `imageInput` for other models,
+  `referenceImagesInput` to accept extra reference images (a list), and
+  `input` for fixed extras such as `{ output_format: 'png' }`.
+- It creates a prediction, waits (the first request is held open for up to
+  30 s), polls every 2 s, then downloads the output. Replicate has no
+  system prompt, so `instructions` lead the prompt.
+- A prediction that runs past `runTimeoutMs` (default 5 minutes), or whose
+  `signal` is aborted, is cancelled on Replicate too, so it stops costing
+  money. `timeoutMs` (default 120 s) limits each HTTP call.
+- The output is only downloaded from HTTPS `replicate.delivery`, without
+  your token. Output must be PNG, JPEG or WebP.
+- Errors give the status and Replicate's message (a failed prediction
+  includes the model's own error).
+
 ### Text and images with OpenAI
 
 OpenAI is a hosted API with its own key (create one at
@@ -279,15 +318,16 @@ without a network.
 
 ## Exports
 
-| Subpath     | What                                                                                            |
-| ----------- | ----------------------------------------------------------------------------------------------- |
-| `.`         | everything below except `./gemini`, `./claude`, `./openai` and `./node`                         |
-| `./ollama`  | `OllamaTextGenerator`, `stripThinking`                                                          |
-| `./comfyui` | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
-| `./gemini`  | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
-| `./claude`  | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                               |
-| `./openai`  | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                  |
-| `./node`    | `directoryWorkflowSource` (Node/Bun only)                                                       |
+| Subpath       | What                                                                                            |
+| ------------- | ----------------------------------------------------------------------------------------------- |
+| `.`           | everything below except `./gemini`, `./claude`, `./openai` and `./node`                         |
+| `./ollama`    | `OllamaTextGenerator`, `stripThinking`                                                          |
+| `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
+| `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
+| `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                               |
+| `./replicate` | `ReplicateImageGenerator`                                                                       |
+| `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                  |
+| `./node`      | `directoryWorkflowSource` (Node/Bun only)                                                       |
 
 ## Development
 

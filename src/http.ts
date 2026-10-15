@@ -52,6 +52,7 @@ export function providerMessage(body: string): string {
     const parsed = JSON.parse(trimmed) as {
       error?: unknown;
       message?: unknown;
+      detail?: unknown;
     };
     const error: unknown = parsed.error;
     if (typeof error === 'string') return error;
@@ -60,6 +61,8 @@ export function providerMessage(body: string): string {
       if (typeof message === 'string') return message;
     }
     if (typeof parsed.message === 'string') return parsed.message;
+    // Replicate: {"title":"Unauthenticated","detail":"...","status":401}.
+    if (typeof parsed.detail === 'string') return parsed.detail;
   } catch {
     // Not JSON; use the text.
   }
