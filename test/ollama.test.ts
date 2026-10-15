@@ -118,3 +118,51 @@ void describe('OllamaTextGenerator', () => {
     );
   });
 });
+
+void describe('stripThinking', () => {
+  void it('drops several blocks and keeps the text between them', () => {
+    assert.equal(
+      stripThinking('<think>a</think>One <think>b</think>two'),
+      'One two'
+    );
+  });
+
+  void it('drops an unclosed block and everything after it', () => {
+    assert.equal(stripThinking('<think>reasoning, then truncated'), '');
+    assert.equal(stripThinking('Visible. <think>secret, cut off'), 'Visible.');
+    assert.equal(
+      stripThinking('<think>done</think>Answer <THINK>more reasoning'),
+      'Answer'
+    );
+  });
+
+  void it('removes nested blocks completely', () => {
+    assert.equal(
+      stripThinking(
+        '<think>outer <think>inner</think> still thinking</think> visible'
+      ),
+      'visible'
+    );
+    assert.equal(
+      stripThinking('<think><think><think>x</think></think></think>ok'),
+      'ok'
+    );
+  });
+
+  void it('leaves text without think tags, and tags with attributes, alone or removed', () => {
+    assert.equal(stripThinking('  plain  '), 'plain');
+    assert.equal(stripThinking('a < b and <thinking>'), 'a < b and <thinking>');
+    assert.equal(stripThinking('<think id="1">x</think>ok'), 'ok');
+  });
+
+  void it('reports an empty reply when a generation is only an unclosed block', async () => {
+    const fake = fakeFetch({
+      'POST /api/chat': json({ message: { content: '<think>never ends' } }),
+    });
+    const result = await new OllamaTextGenerator({
+      model: 'm',
+      fetch: fake.fetch,
+    }).generateText({ instructions: '', prompt: 'p' });
+    assert.match((result as { error: string }).error, /empty reply/);
+  });
+});

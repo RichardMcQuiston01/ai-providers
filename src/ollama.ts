@@ -90,7 +90,24 @@ export class OllamaTextGenerator implements TextGenerator {
   }
 }
 
-/** Drops a reasoning model's `<think>…</think>` block and surrounding space. */
+const THINK_OPEN = /<think\b[^>]*>/i;
+/** A `<think>` block with no `<think>` inside it: the innermost kind. */
+const INNERMOST_BLOCK = /<think\b[^>]*>(?:(?!<think\b)[\s\S])*?<\/think>/gi;
+
+/**
+ * Drops a reasoning model's `<think>…</think>` blocks and surrounding space.
+ * Nested blocks are removed from the inside out. A block that is never
+ * closed (a truncated reply) is dropped from its tag to the end, since
+ * everything after it is still reasoning.
+ */
 export function stripThinking(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  let result: string = text;
+  for (;;) {
+    const next: string = result.replace(INNERMOST_BLOCK, '');
+    if (next === result) break;
+    result = next;
+  }
+  const open: number = result.search(THINK_OPEN);
+  if (open >= 0) result = result.slice(0, open);
+  return result.trim();
 }
