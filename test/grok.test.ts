@@ -12,10 +12,10 @@ import {
 } from '../src/grok.js';
 import type { OpenAiModule } from '../src/openai.js';
 import type { ImageRequest } from '../src/index.js';
-import { fakeFetch, json } from './helpers.js';
+import { fakeFetch, json, PNG_OUTPUT, PNG_OUTPUT_BASE64 } from './helpers.js';
 
 const KEY = 'xai-test-key-1234567890';
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+const PNG = PNG_OUTPUT;
 
 /** The real SDK with its HTTP going to a fake fetch, recording what it sends. */
 function sdkWith(respond: () => Response): {
@@ -156,7 +156,10 @@ void describe('GrokImageGenerator', () => {
     assert.deepEqual(JSON.parse(String(call?.init?.body)), {
       model: 'grok-imagine-image',
       prompt: 'RULES\n\nPROMPT',
-      image: { url: 'data:image/png;base64,iVBORw0K', type: 'image_url' },
+      image: {
+        url: `data:image/png;base64,${PNG_OUTPUT_BASE64}`,
+        type: 'image_url',
+      },
       response_format: 'b64_json',
       n: 1,
     });
@@ -175,6 +178,11 @@ void describe('GrokImageGenerator', () => {
       return result.ok ? result.value.image.mimeType : result.error;
     };
     assert.equal(await run([0xff, 0xd8, 0xff, 0xe0]), 'image/jpeg');
+    // "RI" at 0-1 and "WE" at 8-9 is not enough.
+    assert.match(
+      await run([0x52, 0x49, 0x58, 0x58, 0, 0, 0, 0, 0x57, 0x45, 0x58, 0x58]),
+      /isn't a PNG, JPEG or WebP image/
+    );
     assert.equal(
       await run([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]),
       'image/webp'

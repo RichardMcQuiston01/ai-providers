@@ -5,6 +5,7 @@ import {
   readJson,
   toBase64,
 } from './http.js';
+import { IMAGE_TYPES, checkImageOutput } from './images.js';
 import {
   ChatCompletionsTextGenerator,
   type ChatEndpoint,
@@ -32,12 +33,6 @@ export const GROK_ENDPOINT: ChatEndpoint = {
   keyHelp: 'create one at console.x.ai',
 };
 
-const GROK_IMAGE_TYPES: ReadonlySet<string> = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-]);
-
 export type GrokOptions = OpenAiOptions;
 
 /**
@@ -60,25 +55,8 @@ export interface GrokImageOptions {
   readonly fetch?: FetchLike;
 }
 
-/** The image type from the file's first bytes; the API returns bare base64. */
-function sniffImageType(data: Uint8Array): string | null {
-  if (data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e) {
-    return 'image/png';
-  }
-  if (data[0] === 0xff && data[1] === 0xd8) return 'image/jpeg';
-  if (
-    data[0] === 0x52 &&
-    data[1] === 0x49 &&
-    data[8] === 0x57 &&
-    data[9] === 0x45
-  ) {
-    return 'image/webp';
-  }
-  return null;
-}
-
 function toDataUri(image: AiImage): Result<string> {
-  if (!GROK_IMAGE_TYPES.has(image.mimeType)) {
+  if (!IMAGE_TYPES.has(image.mimeType)) {
     return err(
       `The image to edit is ${image.mimeType}; Grok takes PNG, JPEG or WebP.`
     );
@@ -177,10 +155,8 @@ export class GrokImageGenerator implements ImageGenerator {
     if (data === null || data.length === 0) {
       return err(`${what} returned image data that isn't valid base64`);
     }
-    const mimeType: string | null = sniffImageType(data);
-    if (mimeType === null) {
-      return err(`${what} returned data that isn't a PNG, JPEG or WebP image`);
-    }
-    return ok({ image: { mimeType, data }, notes: null });
+    const output = checkImageOutput(data, what);
+    if (!output.ok) return output;
+    return ok({ image: output.value, notes: null });
   }
 }

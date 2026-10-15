@@ -7,7 +7,7 @@ import {
   ReplicateImageGenerator,
   type ImageRequest,
 } from '../src/index.js';
-import { fakeFetch, json } from './helpers.js';
+import { fakeFetch, json, PNG_OUTPUT } from './helpers.js';
 
 const KEY = 'r8_test-key-1234567890';
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
@@ -27,7 +27,7 @@ const prediction = (
 ): Response => json({ id: 'p1', status, output: null, error: null, ...extra });
 
 const image = (): Response =>
-  new Response(new Uint8Array([1, 2, 3]), {
+  new Response(PNG_OUTPUT, {
     headers: { 'content-type': 'image/png' },
   });
 
@@ -57,7 +57,7 @@ void describe('ReplicateImageGenerator', () => {
     assert.deepEqual(result, {
       ok: true,
       value: {
-        image: { mimeType: 'image/png', data: new Uint8Array([1, 2, 3]) },
+        image: { mimeType: 'image/png', data: PNG_OUTPUT },
         notes: null,
       },
     });
@@ -225,6 +225,27 @@ void describe('ReplicateImageGenerator', () => {
     }
   });
 
+  void it('takes the type from the bytes, not the path or Content-Type', async () => {
+    const run = async (body: BodyInit, contentType: string) => {
+      const fake = fakeFetch({
+        [CREATE]: prediction('succeeded', { output: OUTPUT_URL }),
+        'GET /xezq/abc/out.png': () =>
+          new Response(body, { headers: { 'content-type': contentType } }),
+      });
+      return new ReplicateImageGenerator({
+        apiKey: KEY,
+        fetch: fake.fetch,
+      }).generateImage(request);
+    };
+    const asPng = await run(PNG_OUTPUT, 'image/svg+xml');
+    assert.equal(asPng.ok && asPng.value.image.mimeType, 'image/png');
+    const svg = await run(
+      '<svg xmlns="http://www.w3.org/2000/svg"/>',
+      'image/png'
+    );
+    assert.match(errorOf(svg), /isn't a PNG, JPEG or WebP image/);
+  });
+
   void it('rejects an output that is not an image, or is missing', async () => {
     const notImage = await new ReplicateImageGenerator({
       apiKey: KEY,
@@ -240,7 +261,7 @@ void describe('ReplicateImageGenerator', () => {
     }).generateImage(request);
     assert.match(
       errorOf(notImage),
-      /expected a PNG, JPEG or WebP image but got text\/html/
+      /returned data that isn't a PNG, JPEG or WebP image/
     );
     const none = await new ReplicateImageGenerator({
       apiKey: KEY,

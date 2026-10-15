@@ -11,6 +11,7 @@ import {
   OpenAiTextGenerator,
   type OpenAiModule,
 } from '../src/openai.js';
+import { PNG_OUTPUT, PNG_OUTPUT_BASE64 } from './helpers.js';
 
 const KEY = 'sk-proj-test-key-1234567890';
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
@@ -88,7 +89,7 @@ function completion(
 function imageReply(overrides: Record<string, unknown> = {}): Response {
   return Response.json({
     created: 1,
-    data: [{ b64_json: 'AQID' }],
+    data: [{ b64_json: PNG_OUTPUT_BASE64 }],
     output_format: 'png',
     ...overrides,
   });
@@ -290,7 +291,7 @@ void describe('OpenAiImageGenerator', () => {
     assert.deepEqual(result, {
       ok: true,
       value: {
-        image: { mimeType: 'image/jpeg', data: new Uint8Array([1, 2, 3]) },
+        image: { mimeType: 'image/png', data: PNG_OUTPUT },
         notes: null,
       },
     });
@@ -437,5 +438,49 @@ void describe('OpenAiImageGenerator', () => {
       result.ok ? '' : result.error,
       /needs the optional package openai;.*Cannot find module/
     );
+  });
+});
+
+void describe('OpenAiImageGenerator output types', () => {
+  const run = async (
+    response: Response
+  ): Promise<{ type?: string; error?: string }> => {
+    const fake = sdkWith(() => response.clone());
+    const result = await new OpenAiImageGenerator({
+      apiKey: KEY,
+      loadModule: fake.load,
+    }).generateImage({
+      instructions: '',
+      prompt: 'P',
+      images: [{ mimeType: 'image/png', data: PNG }],
+      mode: null,
+    });
+    return result.ok
+      ? { type: result.value.image.mimeType }
+      : { error: result.error };
+  };
+
+  void it('ignores an output_format the reply made up', async () => {
+    for (const output_format of [
+      'svg+xml',
+      'png\r\nX-Evil: 1',
+      'gif',
+      'jpeg',
+    ]) {
+      assert.deepEqual(
+        await run(imageReply({ output_format })),
+        { type: 'image/png' },
+        output_format
+      );
+    }
+  });
+
+  void it('refuses bytes that are not PNG, JPEG or WebP', async () => {
+    const result = await run(
+      imageReply({
+        data: [{ b64_json: btoa('<svg xmlns="http://www.w3.org/2000/svg"/>') }],
+      })
+    );
+    assert.match(result.error ?? '', /isn't a PNG, JPEG or WebP image/);
   });
 });

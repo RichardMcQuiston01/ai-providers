@@ -38,3 +38,9 @@ export const json = (body: unknown, status = 200): Response =>
     status,
     headers: { 'content-type': 'application/json' },
   });
+
+/** The first bytes of a PNG plus three more: providers now check the bytes of images they return. */
+export const PNG_OUTPUT = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3,
+]);
+export const PNG_OUTPUT_BASE64 = 'iVBORw0KGgoBAgM=';

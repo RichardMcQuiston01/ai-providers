@@ -1,4 +1,5 @@
 import { callProvider, readJson } from './http.js';
+import { checkImageOutput } from './images.js';
 import type {
   AiImage,
   FetchLike,
@@ -419,21 +420,6 @@ export class ComfyUiImageGenerator implements ImageGenerator {
         `${what}: the image is ${(data.length / 1024 / 1024).toFixed(1)} MB; the limit is ${MAX_COMFYUI_OUTPUT_BYTES / 1024 / 1024} MB.`
       );
     }
-    const contentType: string =
-      response.value.headers.get('content-type') ?? '';
-    const mimeType: string = (contentType.split(';')[0] ?? '').trim();
-    return ok({
-      mimeType: mimeType.startsWith('image/')
-        ? mimeType
-        : guessMime(output.filename),
-      data,
-    });
+    return checkImageOutput(data, what);
   }
-}
-
-function guessMime(filename: string): string {
-  const lower: string = filename.toLowerCase();
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-  if (lower.endsWith('.webp')) return 'image/webp';
-  return 'image/png';
 }

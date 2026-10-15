@@ -2,6 +2,7 @@
 // and `./gemini`, which loads an optional peer package.
 export * from './result.js';
 export * from './port.js';
+export * from './images.js';
 export * from './http.js';
 export * from './hosts.js';
 export * from './ollama.js';

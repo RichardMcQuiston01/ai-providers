@@ -35,6 +35,11 @@ Design:
   `{ ok: true, value } | { ok: false, error }`. Errors are specific: they
   name the provider, the model or workflow, the HTTP status and the
   provider's own message.
+- **Returned images are checked.** Every image provider returns PNG, JPEG
+  or WebP only, and `mimeType` comes from the image's own bytes, never from
+  a type the provider or server declared. Anything else (SVG, GIF, HTML, a
+  truncated file) is an error. `sniffImageType` and `checkImageOutput` are
+  exported for your own use.
 - **Providers only generate.** Prompt rules, output checks and the decision
   to use a result stay in your app, so swapping providers can't weaken
   them.
