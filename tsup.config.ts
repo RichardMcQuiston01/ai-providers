@@ -9,6 +9,7 @@ export default defineConfig({
     comfyui: 'src/comfyui.ts',
     gemini: 'src/gemini.ts',
     claude: 'src/claude.ts',
+    openai: 'src/openai.ts',
     node: 'src/node.ts',
   },
   format: ['esm', 'cjs'],

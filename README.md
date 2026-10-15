@@ -20,6 +20,9 @@ today, a hosted API tomorrow, without changing the calling code.
   `@richardmcquiston01/gemini-icon-gen` as an optional peer dependency.
 - **Claude** (`ClaudeTextGenerator`): text with Anthropic's Claude API,
   using the official `@anthropic-ai/sdk` as an optional peer dependency.
+- **OpenAI** (`OpenAiTextGenerator`, `OpenAiImageGenerator`): captions and
+  photo edits with OpenAI's API, using the official `openai` package as an
+  optional peer dependency.
 
 Design:
 
@@ -188,6 +191,54 @@ const reply = await text.generateText({
 - Without the SDK installed, it returns an error naming the package. The
   `./claude` subpath is kept out of the main entry.
 
+### Text and images with OpenAI
+
+OpenAI is a hosted API with its own key (create one at
+platform.openai.com; a ChatGPT plan doesn't include API use). Install the
+SDK alongside:
+
+```bash
+bun add @richardmcquiston01/ai-providers openai
+```
+
+```ts
+import {
+  OpenAiImageGenerator,
+  OpenAiTextGenerator,
+} from '@richardmcquiston01/ai-providers/openai';
+
+const apiKey: string = env.OPENAI_API_KEY; // your app reads the key; the package never does
+
+const text = new OpenAiTextGenerator({ apiKey }); // gpt-5.5 unless you pass model
+const reply = await text.generateText({
+  instructions: 'Rewrite captions to be short and friendly.',
+  prompt: 'Handmade oak coasters, set of 4',
+});
+
+const images = new OpenAiImageGenerator({ apiKey }); // gpt-image-2 unless you pass model
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- Text uses Chat Completions: `instructions` become the system message;
+  images (PNG, JPEG, WebP) go before the prompt. A refusal comes back as an
+  error carrying the model's explanation.
+- Images use `images.edit`: the first image is edited, any others are
+  references. It has no system prompt, so `instructions` lead the prompt.
+  There is one mode, named after the model. `quality` (`low` … `high`) is
+  optional.
+- API errors come back with their status and OpenAI's message (401 says
+  the key is wrong, 404 to check the model). Credentials and the endpoint
+  come only from the options; the SDK isn't allowed to fall back to
+  `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` or `OPENAI_BASE_URL`.
+- `timeoutMs` (default 120 s) and `signal` cancel the request itself.
+- Without the SDK installed, it returns an error naming the package. The
+  `./openai` subpath is kept out of the main entry.
+
 ### Choosing providers from configuration
 
 Use `checkProviderHost` and `parseAllowedHosts` with your own settings:
@@ -230,11 +281,12 @@ without a network.
 
 | Subpath     | What                                                                                            |
 | ----------- | ----------------------------------------------------------------------------------------------- |
-| `.`         | everything below except `./gemini`, `./claude` and `./node`                                     |
+| `.`         | everything below except `./gemini`, `./claude`, `./openai` and `./node`                         |
 | `./ollama`  | `OllamaTextGenerator`, `stripThinking`                                                          |
 | `./comfyui` | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
 | `./gemini`  | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
 | `./claude`  | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                               |
+| `./openai`  | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                  |
 | `./node`    | `directoryWorkflowSource` (Node/Bun only)                                                       |
 
 ## Development

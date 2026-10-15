@@ -15,7 +15,7 @@ Gemini), and later Maker Toolkit. `ROADMAP.md` has what comes next
 
 ```
 src/
-  index.ts      barrel: everything except ./node, ./gemini and ./claude (runtime-neutral)
+  index.ts      barrel: everything except ./node, ./gemini, ./claude and ./openai (runtime-neutral)
   result.ts     Result<T>, ok, err, describeUnknownError
   port.ts       AiImage, TextGenerator, ImageGenerator, requests, FetchLike
   http.ts       callProvider (timeout + signal + specific errors), readJson,
@@ -30,15 +30,18 @@ src/
   claude.ts     subpath ./claude: ClaudeTextGenerator over the optional peer
                 @anthropic-ai/sdk (dynamic import(), injectable loadModule; tests run
                 the real SDK against a fake fetch)
+  openai.ts     subpath ./openai: OpenAiTextGenerator (Chat Completions), OpenAiImageGenerator
+                (images.edit) over the optional peer openai (dynamic import(), injectable
+                loadModule; tests run the real SDK against a fake fetch)
   node.ts       subpath ./node: directoryWorkflowSource (the only node:* code)
 test/           node:test + node:assert, run by bun test; fake fetch, no network
 ```
 
 Adding a provider: `src/<provider>.ts`, export it from `src/index.ts` (unless
-it loads an optional peer, like `gemini.ts` and `claude.ts`), add
+it loads an optional peer, like `gemini.ts`, `claude.ts` and `openai.ts`), add
 the entry to `tsup.config.ts`, `package.json` `exports` and `typesVersions`,
 test it against a fake `fetch`, and add a changeset. A provider whose SDK
-is heavy (Gemini, Claude) takes it as an **optional peer dependency**
+is heavy (Gemini, Claude, OpenAI) takes it as an **optional peer dependency**
 loaded with `import()`, and returns a Result error naming the package when
 it's missing.
 
