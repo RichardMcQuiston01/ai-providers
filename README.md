@@ -20,6 +20,9 @@ today, a hosted API tomorrow, without changing the calling code.
   `@richardmcquiston01/gemini-icon-gen` as an optional peer dependency.
 - **Claude** (`ClaudeTextGenerator`): text with Anthropic's Claude API,
   using the official `@anthropic-ai/sdk` as an optional peer dependency.
+- **Grok** (`GrokTextGenerator`, `GrokImageGenerator`): text and photo
+  edits with xAI's API; text uses the optional `openai` peer pointed at
+  api.x.ai, images use plain `fetch`.
 - **Replicate** (`ReplicateImageGenerator`): image edits with any Replicate
   image model, over plain `fetch` (no SDK needed).
 - **OpenAI** (`OpenAiTextGenerator`, `OpenAiImageGenerator`): captions and
@@ -230,6 +233,52 @@ const edited = await images.generateImage({
 - Errors give the status and Replicate's message (a failed prediction
   includes the model's own error).
 
+### Text and images with Grok
+
+Grok is xAI's hosted API with its own key (create one at console.x.ai).
+Text uses xAI's OpenAI-compatible endpoint, so it needs the `openai`
+package; images run on plain `fetch`.
+
+```bash
+bun add @richardmcquiston01/ai-providers openai
+```
+
+```ts
+import {
+  GrokImageGenerator,
+  GrokTextGenerator,
+} from '@richardmcquiston01/ai-providers/grok';
+
+const apiKey: string = env.XAI_API_KEY; // your app reads the key; the package never does
+
+const text = new GrokTextGenerator({ apiKey }); // grok-4 unless you pass model
+const reply = await text.generateText({
+  instructions: 'Rewrite captions to be short and friendly.',
+  prompt: 'Handmade oak coasters, set of 4',
+});
+
+const images = new GrokImageGenerator({ apiKey }); // grok-imagine-image unless you pass model
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- Text works like the OpenAI provider: `instructions` are the system
+  message, images (PNG, JPEG, WebP) go before the prompt, and a refusal is
+  an error. The endpoint is fixed to api.x.ai; the SDK can't fall back to
+  `OPENAI_BASE_URL` or other OpenAI environment settings.
+- Images call `POST /v1/images/edits` with a JSON body (the `openai`
+  SDK's `images.edit` sends multipart form data, which xAI doesn't accept).
+  It edits one image, so a request with reference images is refused.
+  `instructions` lead the prompt.
+- Model names change often; pass `model` to use another. The defaults
+  haven't been checked against a live account.
+- Errors give the status and xAI's message. `timeoutMs` (default 120 s) and
+  `signal` apply to both.
+
 ### Text and images with OpenAI
 
 OpenAI is a hosted API with its own key (create one at
@@ -320,7 +369,7 @@ without a network.
 
 | Subpath       | What                                                                                            |
 | ------------- | ----------------------------------------------------------------------------------------------- |
-| `.`           | everything below except `./gemini`, `./claude`, `./openai` and `./node`                         |
+| `.`           | everything below except `./gemini`, `./claude`, `./openai`, `./grok` and `./node`               |
 | `./ollama`    | `OllamaTextGenerator`, `stripThinking`                                                          |
 | `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
 | `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
