@@ -4,12 +4,13 @@ import { describe, it } from 'node:test';
 import {
   ComfyUiImageGenerator,
   fillWorkflow,
+  type ImageRequest,
   memoryWorkflowSource,
   ok,
   parseWorkflow,
   readHistory,
 } from '../src/index.js';
-import { fakeFetch, json } from './helpers.js';
+import { fakeFetch, json, PNG_OUTPUT } from './helpers.js';
 
 const PHOTO = {
   mimeType: 'image/png',
@@ -139,6 +140,47 @@ void describe('ComfyUI workflows', () => {
   });
 });
 
+void describe('ComfyUiImageGenerator host check', () => {
+  void it('refuses a remote or malformed host before reading workflows or sending anything', async () => {
+    for (const host of [
+      'https://example.com',
+      'nope',
+      'http://u:p@127.0.0.1:8188',
+    ]) {
+      const fake = fakeFetch({});
+      const result = await new ComfyUiImageGenerator({
+        workflows: memoryWorkflowSource({ a: JSON.stringify(WORKFLOW) }),
+        host,
+        fetch: fake.fetch,
+      }).generateImage({
+        instructions: '',
+        prompt: 'p',
+        images: [{ mimeType: 'image/png', data: new Uint8Array([1]) }],
+        mode: null,
+      });
+      assert.equal(result.ok, false, host);
+      assert.match((result as { error: string }).error, /^The ComfyUI host /);
+      assert.equal(fake.calls.length, 0, host);
+    }
+  });
+
+  void it('accepts a host on the allow list', async () => {
+    const fake = fakeFetch({ 'POST /upload/image': json({}, 500) });
+    await new ComfyUiImageGenerator({
+      workflows: memoryWorkflowSource({ a: JSON.stringify(WORKFLOW) }),
+      host: 'http://gpu.lan:8188',
+      allowedHosts: ['gpu.lan'],
+      fetch: fake.fetch,
+    }).generateImage({
+      instructions: '',
+      prompt: 'p',
+      images: [{ mimeType: 'image/png', data: new Uint8Array([1]) }],
+      mode: null,
+    });
+    assert.equal(fake.calls[0]?.url.origin, 'http://gpu.lan:8188');
+  });
+});
+
 void describe('ComfyUiImageGenerator', () => {
   void it('uploads, queues the filled workflow, waits, and downloads the output', async () => {
     const fake = fakeFetch({
@@ -165,7 +207,7 @@ void describe('ComfyUiImageGenerator', () => {
           }),
       ],
       'GET /view': () =>
-        new Response(new Uint8Array([1, 2, 3]), {
+        new Response(PNG_OUTPUT, {
           headers: { 'content-type': 'image/png' },
         }),
     });
@@ -188,7 +230,7 @@ void describe('ComfyUiImageGenerator', () => {
       mode: null,
     });
     assert.ok(result.ok, JSON.stringify(result));
-    assert.deepEqual([...result.value.image.data], [1, 2, 3]);
+    assert.deepEqual([...result.value.image.data], [...PNG_OUTPUT]);
     assert.equal(result.value.image.mimeType, 'image/png');
     assert.match(result.value.notes ?? '', /touch-up/);
     assert.deepEqual(slept, [1000]);
@@ -199,7 +241,7 @@ void describe('ComfyUiImageGenerator', () => {
     assert.equal(queued.prompt['1']?.inputs['image'], 'etsy.png');
     assert.equal(
       queued.prompt['2']?.inputs['text'],
-      'studio photo, brighter, soft light'
+      'studio photo, RULES\n\nbrighter, soft light'
     );
     assert.equal(queued.prompt['3']?.inputs['seed'], 7);
     const form = fake.calls[0]?.init?.body as FormData;
@@ -296,5 +338,198 @@ void describe('ComfyUiImageGenerator', () => {
       ).error,
       /No ComfyUI workflows found/
     );
+  });
+});
+
+void describe('ComfyUiImageGenerator output types', () => {
+  const run = async (body: BodyInit, contentType: string) => {
+    const fake = fakeFetch({
+      'POST /upload/image': json({ name: 'in.png' }),
+      'POST /prompt': json({ prompt_id: 'p1' }),
+      'GET /history/p1': json({
+        p1: {
+          status: { completed: true },
+          outputs: { '4': { images: [{ filename: 'out.png' }] } },
+        },
+      }),
+      'GET /view': () =>
+        new Response(body, { headers: { 'content-type': contentType } }),
+    });
+    return new ComfyUiImageGenerator({
+      workflows: memoryWorkflowSource({ a: JSON.stringify(WORKFLOW) }),
+      fetch: fake.fetch,
+    }).generateImage({
+      instructions: '',
+      prompt: 'p',
+      images: [PHOTO],
+      mode: null,
+    });
+  };
+
+  void it('takes the type from the bytes, not Content-Type or the file name', async () => {
+    const asPng = await run(PNG_OUTPUT, 'image/svg+xml');
+    assert.equal(asPng.ok && asPng.value.image.mimeType, 'image/png');
+    const svg = await run(
+      '<svg xmlns="http://www.w3.org/2000/svg"/>',
+      'image/svg+xml'
+    );
+    assert.equal(svg.ok, false);
+    assert.match(
+      (svg as { error: string }).error,
+      /isn't a PNG, JPEG or WebP image/
+    );
+  });
+});
+
+void describe('ComfyUiImageGenerator instructions and cancellation', () => {
+  const request = (overrides: Partial<ImageRequest> = {}): ImageRequest => ({
+    instructions: '',
+    prompt: 'brighter',
+    images: [PHOTO],
+    mode: null,
+    ...overrides,
+  });
+  const generatorWith = (
+    routes: Parameters<typeof fakeFetch>[0],
+    extra: Partial<ConstructorParameters<typeof ComfyUiImageGenerator>[0]> = {}
+  ) => {
+    const fake = fakeFetch({
+      'POST /upload/image': json({ name: 'in.png' }),
+      'POST /prompt': json({ prompt_id: 'p1' }),
+      ...routes,
+    });
+    return {
+      fake,
+      generator: new ComfyUiImageGenerator({
+        workflows: memoryWorkflowSource({ a: JSON.stringify(WORKFLOW) }),
+        fetch: fake.fetch,
+        sleep: async () => undefined,
+        ...extra,
+      }),
+    };
+  };
+  const posted = (fake: ReturnType<typeof fakeFetch>): string[] =>
+    fake.calls
+      .filter((call) => call.init?.method === 'POST')
+      .map((call) => call.url.pathname);
+
+  void it('puts only the prompt in the workflow when there are no instructions', async () => {
+    const { fake, generator } = generatorWith({
+      'GET /history/p1': json({
+        p1: {
+          status: { completed: true },
+          outputs: { '4': { images: [{ filename: 'o.png' }] } },
+        },
+      }),
+      'GET /view': new Response(PNG_OUTPUT),
+    });
+    const result = await generator.generateImage(
+      request({ instructions: '  ' })
+    );
+    assert.equal(result.ok, true);
+    const queued = JSON.parse(String(fake.calls[1]?.init?.body)) as {
+      prompt: Record<string, { inputs: Record<string, unknown> }>;
+    };
+    assert.equal(
+      queued.prompt['2']?.inputs['text'],
+      'studio photo, brighter, soft light'
+    );
+  });
+
+  void it('removes a queued prompt from the queue when the caller aborts', async () => {
+    const controller = new AbortController();
+    const { fake, generator } = generatorWith(
+      {
+        'GET /history/p1': json({}),
+        'GET /queue': json({
+          queue_running: [],
+          queue_pending: [[1, 'p1', {}]],
+        }),
+        'POST /queue': json({}),
+      },
+      {
+        sleep: async () => {
+          controller.abort();
+        },
+      }
+    );
+    const result = await generator.generateImage(
+      request({ signal: controller.signal })
+    );
+    assert.match((result as { error: string }).error, /was cancelled/);
+    assert.deepEqual(posted(fake).slice(-1), ['/queue']);
+    const del = fake.calls.at(-1)?.init?.body;
+    assert.deepEqual(JSON.parse(String(del)), { delete: ['p1'] });
+    assert.ok(!posted(fake).includes('/interrupt'));
+  });
+
+  void it('interrupts a running prompt on timeout', async () => {
+    let clock = 0;
+    const { fake, generator } = generatorWith(
+      {
+        'GET /history/p1': json({}),
+        'GET /queue': json({
+          queue_running: [[0, 'p1', {}]],
+          queue_pending: [],
+        }),
+        'POST /interrupt': json({}),
+      },
+      {
+        runTimeoutMs: 3000,
+        now: () => clock,
+        sleep: async (ms) => {
+          clock += ms;
+        },
+      }
+    );
+    const result = await generator.generateImage(request());
+    assert.match(
+      (result as { error: string }).error,
+      /didn't finish within 3 s, so ComfyUI was asked to stop it/
+    );
+    assert.deepEqual(posted(fake).slice(-1), ['/interrupt']);
+  });
+
+  void it("leaves someone else's job alone and survives a failing cancel", async () => {
+    const controller = new AbortController();
+    const other = generatorWith(
+      {
+        'GET /history/p1': json({}),
+        'GET /queue': json({
+          queue_running: [[0, 'other', {}]],
+          queue_pending: [],
+        }),
+      },
+      { sleep: async () => controller.abort() }
+    );
+    const first = await other.generator.generateImage(
+      request({ signal: controller.signal })
+    );
+    assert.match((first as { error: string }).error, /was cancelled/);
+    assert.deepEqual(posted(other.fake), ['/upload/image', '/prompt']);
+
+    const again = new AbortController();
+    const broken = generatorWith(
+      { 'GET /history/p1': json({}), 'GET /queue': json({}, 500) },
+      { sleep: async () => again.abort() }
+    );
+    const second = await broken.generator.generateImage(
+      request({ signal: again.signal })
+    );
+    assert.match((second as { error: string }).error, /was cancelled/);
+  });
+
+  void it('stops waiting between polls as soon as the caller aborts', async () => {
+    const controller = new AbortController();
+    const { generator } = generatorWith(
+      { 'GET /history/p1': json({}), 'GET /queue': json({}) },
+      { sleep: () => new Promise<void>(() => undefined) }
+    );
+    const running = generator.generateImage(
+      request({ signal: controller.signal })
+    );
+    setTimeout(() => controller.abort(), 10);
+    const result = await running;
+    assert.match((result as { error: string }).error, /was cancelled/);
   });
 });

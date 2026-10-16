@@ -14,6 +14,48 @@ const PHOTO = {
   data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
 };
 
+void describe('OllamaTextGenerator host check', () => {
+  void it('refuses a remote, malformed or credentialed host before sending anything', async () => {
+    for (const host of [
+      'https://example.com',
+      'http://127.0.0.1:11434/api',
+      'not a url',
+      'http://user:secret@127.0.0.1:11434',
+    ]) {
+      const fake = fakeFetch({});
+      const result = await new OllamaTextGenerator({
+        model: 'm',
+        host,
+        fetch: fake.fetch,
+      }).generateText({ instructions: '', prompt: 'p' });
+      assert.equal(result.ok, false, host);
+      assert.match((result as { error: string }).error, /^The Ollama host /);
+      assert.doesNotMatch((result as { error: string }).error, /secret/);
+      assert.equal(fake.calls.length, 0, host);
+    }
+  });
+
+  void it('uses the default host for an empty one and keeps the origin only', async () => {
+    const fake = fakeFetch({
+      'POST /api/chat': json({ message: { content: 'ok' } }),
+    });
+    await new OllamaTextGenerator({
+      model: 'm',
+      host: ' ',
+      fetch: fake.fetch,
+    }).generateText({ instructions: '', prompt: 'p' });
+    await new OllamaTextGenerator({
+      model: 'm',
+      host: 'http://localhost:11434/',
+      fetch: fake.fetch,
+    }).generateText({ instructions: '', prompt: 'p' });
+    assert.deepEqual(
+      fake.calls.map((call) => call.url.origin),
+      ['http://127.0.0.1:11434', 'http://localhost:11434']
+    );
+  });
+});
+
 void describe('OllamaTextGenerator', () => {
   void it('sends a non-streamed chat with the rules as the system message', async () => {
     const fake = fakeFetch({
@@ -55,6 +97,7 @@ void describe('OllamaTextGenerator', () => {
     const generator = new OllamaTextGenerator({
       model: 'llava',
       host: 'http://gpu.lan:11434/',
+      allowedHosts: ['gpu.lan'],
       fetch: fake.fetch,
     });
     await generator.generateText({
@@ -116,5 +159,53 @@ void describe('OllamaTextGenerator', () => {
       (offline as { error: string }).error,
       /Could not reach .*127\.0\.0\.1:11434.*Is it running\?/
     );
+  });
+});
+
+void describe('stripThinking', () => {
+  void it('drops several blocks and keeps the text between them', () => {
+    assert.equal(
+      stripThinking('<think>a</think>One <think>b</think>two'),
+      'One two'
+    );
+  });
+
+  void it('drops an unclosed block and everything after it', () => {
+    assert.equal(stripThinking('<think>reasoning, then truncated'), '');
+    assert.equal(stripThinking('Visible. <think>secret, cut off'), 'Visible.');
+    assert.equal(
+      stripThinking('<think>done</think>Answer <THINK>more reasoning'),
+      'Answer'
+    );
+  });
+
+  void it('removes nested blocks completely', () => {
+    assert.equal(
+      stripThinking(
+        '<think>outer <think>inner</think> still thinking</think> visible'
+      ),
+      'visible'
+    );
+    assert.equal(
+      stripThinking('<think><think><think>x</think></think></think>ok'),
+      'ok'
+    );
+  });
+
+  void it('leaves text without think tags, and tags with attributes, alone or removed', () => {
+    assert.equal(stripThinking('  plain  '), 'plain');
+    assert.equal(stripThinking('a < b and <thinking>'), 'a < b and <thinking>');
+    assert.equal(stripThinking('<think id="1">x</think>ok'), 'ok');
+  });
+
+  void it('reports an empty reply when a generation is only an unclosed block', async () => {
+    const fake = fakeFetch({
+      'POST /api/chat': json({ message: { content: '<think>never ends' } }),
+    });
+    const result = await new OllamaTextGenerator({
+      model: 'm',
+      fetch: fake.fetch,
+    }).generateText({ instructions: '', prompt: 'p' });
+    assert.match((result as { error: string }).error, /empty reply/);
   });
 });

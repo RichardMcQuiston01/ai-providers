@@ -10,9 +10,10 @@ import {
   type GeminiModule,
 } from '../src/gemini.js';
 import { ok } from '../src/index.js';
+import { PNG_OUTPUT, PNG_OUTPUT_BASE64 } from './helpers.js';
 
 const PHOTO = { mimeType: 'image/jpeg', data: new Uint8Array([1, 2, 3]) };
-const EDITED_BASE64 = 'iVBORw=='; // bytes 0x89 0x50 0x4e 0x47
+const EDITED_BASE64 = PNG_OUTPUT_BASE64;
 
 type TextCall = Parameters<GeminiModule['generateText']>[0];
 type EditCall = Parameters<GeminiModule['editImage']>[0];
@@ -221,7 +222,7 @@ void describe('GeminiImageGenerator', () => {
       ok({
         image: {
           mimeType: 'image/png',
-          data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+          data: PNG_OUTPUT,
         },
         notes: 'Done.',
       })
@@ -360,5 +361,54 @@ void describe('Gemini API key', () => {
         !Object.getOwnPropertyNames(generator).some((name) => /key/i.test(name))
       );
     }
+  });
+});
+
+void describe('GeminiImageGenerator output types', () => {
+  const run = async (
+    reply: Awaited<ReturnType<GeminiModule['editImage']>>
+  ): Promise<{ ok: boolean; mimeType?: string; error?: string }> => {
+    const fake = fakeGemini({ editImage: async () => reply });
+    const result = await new GeminiImageGenerator({
+      apiKey: 'k',
+      loadModule: fake.load,
+    }).generateImage({
+      instructions: '',
+      prompt: 'p',
+      images: [PHOTO],
+      mode: null,
+    });
+    return result.ok
+      ? { ok: true, mimeType: result.value.image.mimeType }
+      : { ok: false, error: result.error };
+  };
+
+  void it('takes the type from the bytes, whatever the package says', async () => {
+    assert.deepEqual(
+      await run({
+        success: true,
+        imageData: PNG_OUTPUT_BASE64,
+        mimeType: 'image/svg+xml',
+      }),
+      { ok: true, mimeType: 'image/png' }
+    );
+    assert.deepEqual(
+      await run({ success: true, imageData: PNG_OUTPUT_BASE64 }),
+      {
+        ok: true,
+        mimeType: 'image/png',
+      }
+    );
+  });
+
+  void it('refuses bytes that are not PNG, JPEG or WebP', async () => {
+    const svg = btoa('<svg xmlns="http://www.w3.org/2000/svg"/>');
+    const result = await run({
+      success: true,
+      imageData: svg,
+      mimeType: 'image/png',
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /isn't a PNG, JPEG or WebP image/);
   });
 });

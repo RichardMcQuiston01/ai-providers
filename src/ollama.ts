@@ -1,3 +1,4 @@
+import { checkProviderHost } from './hosts.js';
 import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
@@ -17,8 +18,16 @@ export const DEFAULT_OLLAMA_HOST = 'http://127.0.0.1:11434';
 export interface OllamaTextOptions {
   /** The model, as `ollama list` shows it, e.g. llama3.2. */
   readonly model: string;
-  /** Base URL; check it with checkProviderHost first. Default 127.0.0.1:11434. */
+  /**
+   * Base URL, checked with checkProviderHost: this machine unless the host
+   * is in `allowedHosts`. Default 127.0.0.1:11434. A bad host makes
+   * generateText return an error.
+   */
   readonly host?: string;
+  /** Hosts allowed besides loopback (see parseAllowedHosts). */
+  readonly allowedHosts?: readonly string[];
+  /** What to call the allow list in messages, e.g. an env variable name. */
+  readonly allowedHostsLabel?: string;
   readonly fetch?: FetchLike;
   readonly timeoutMs?: number;
 }
@@ -32,18 +41,32 @@ export class OllamaTextGenerator implements TextGenerator {
   readonly provider = 'ollama';
   readonly model: string;
   private readonly host: string;
+  private readonly hostCheck: Result<string>;
   private readonly fetchImpl: FetchLike;
   private readonly timeoutMs: number;
 
   constructor(options: OllamaTextOptions) {
     this.model = options.model;
-    this.host = (options.host ?? DEFAULT_OLLAMA_HOST).replace(/\/+$/, '');
+    this.hostCheck = checkProviderHost(
+      'The Ollama host',
+      options.host?.trim() || DEFAULT_OLLAMA_HOST,
+      {
+        ...(options.allowedHosts !== undefined
+          ? { allowedHosts: options.allowedHosts }
+          : {}),
+        ...(options.allowedHostsLabel !== undefined
+          ? { allowedHostsLabel: options.allowedHostsLabel }
+          : {}),
+      }
+    );
+    this.host = this.hostCheck.ok ? this.hostCheck.value : '';
     this.fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
     this.timeoutMs = options.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS;
   }
 
   async generateText(request: TextRequest): Promise<Result<TextResult>> {
     const what = `Ollama (model "${this.model}")`;
+    if (!this.hostCheck.ok) return this.hostCheck;
     if (this.model.trim() === '') {
       return err(
         'No Ollama model is set; use one you have pulled (`ollama list`).'
@@ -90,7 +113,24 @@ export class OllamaTextGenerator implements TextGenerator {
   }
 }
 
-/** Drops a reasoning model's `<think>…</think>` block and surrounding space. */
+const THINK_OPEN = /<think\b[^>]*>/i;
+/** A `<think>` block with no `<think>` inside it: the innermost kind. */
+const INNERMOST_BLOCK = /<think\b[^>]*>(?:(?!<think\b)[\s\S])*?<\/think>/gi;
+
+/**
+ * Drops a reasoning model's `<think>…</think>` blocks and surrounding space.
+ * Nested blocks are removed from the inside out. A block that is never
+ * closed (a truncated reply) is dropped from its tag to the end, since
+ * everything after it is still reasoning.
+ */
 export function stripThinking(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  let result: string = text;
+  for (;;) {
+    const next: string = result.replace(INNERMOST_BLOCK, '');
+    if (next === result) break;
+    result = next;
+  }
+  const open: number = result.search(THINK_OPEN);
+  if (open >= 0) result = result.slice(0, open);
+  return result.trim();
 }

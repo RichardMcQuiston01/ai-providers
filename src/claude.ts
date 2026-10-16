@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
 import { DEFAULT_AI_TIMEOUT_MS, toBase64 } from './http.js';
+import { IMAGE_TYPES } from './images.js';
 import type {
   AiImage,
   TextGenerator,
@@ -28,9 +29,7 @@ const FALLBACK_MODELS: ReadonlySet<string> = new Set([
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
 const CLAUDE_IMAGE_TYPES: ReadonlySet<string> = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/webp',
+  ...IMAGE_TYPES,
   'image/gif',
 ]);
 

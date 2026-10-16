@@ -20,6 +20,14 @@ today, a hosted API tomorrow, without changing the calling code.
   `@richardmcquiston01/gemini-icon-gen` as an optional peer dependency.
 - **Claude** (`ClaudeTextGenerator`): text with Anthropic's Claude API,
   using the official `@anthropic-ai/sdk` as an optional peer dependency.
+- **Grok** (`GrokTextGenerator`, `GrokImageGenerator`): text and photo
+  edits with xAI's API; text uses the optional `openai` peer pointed at
+  api.x.ai, images use plain `fetch`.
+- **Replicate** (`ReplicateImageGenerator`): image edits with any Replicate
+  image model, over plain `fetch` (no SDK needed).
+- **OpenAI** (`OpenAiTextGenerator`, `OpenAiImageGenerator`): captions and
+  photo edits with OpenAI's API, using the official `openai` package as an
+  optional peer dependency.
 
 Design:
 
@@ -27,11 +35,24 @@ Design:
   `{ ok: true, value } | { ok: false, error }`. Errors are specific: they
   name the provider, the model or workflow, the HTTP status and the
   provider's own message.
+- **No surprise redirects.** Provider calls ask `fetch` not to follow
+  redirects (a redirect would carry your prompt and image to another
+  address), so a redirect comes back as an error naming where it pointed.
+  The one exception is Replicate's output download, which follows a
+  redirect only to another `replicate.delivery` address. Reply bodies are
+  read with a size cap, and a bad `timeoutMs` is an error, not an exception.
+- **Returned images are checked.** Every image provider returns PNG, JPEG
+  or WebP only, and `mimeType` comes from the image's own bytes, never from
+  a type the provider or server declared. Anything else (SVG, GIF, HTML, a
+  truncated file) is an error. `sniffImageType` and `checkImageOutput` are
+  exported for your own use.
 - **Providers only generate.** Prompt rules, output checks and the decision
   to use a result stay in your app, so swapping providers can't weaken
   them.
-- **Local by default.** `checkProviderHost` accepts only this machine,
-  unless a host is on your allow list.
+- **Local by default.** The Ollama and ComfyUI generators run
+  `checkProviderHost` on their `host`: only this machine is accepted, unless
+  the host is in `allowedHosts`. A URL with a username or password is
+  refused, and error messages never repeat the URL you gave.
 - **Runtime-neutral.** The main entry runs in Node 20.3+, Bun and browsers,
   and ships as ESM and CommonJS with types. The only Node-specific code,
   reading workflows from a folder, is in the `./node` subpath.
@@ -46,17 +67,17 @@ bun add @richardmcquiston01/ai-providers
 
 ```ts
 import {
-  checkProviderHost,
   OllamaTextGenerator,
+  parseAllowedHosts,
   type TextGenerator,
 } from '@richardmcquiston01/ai-providers';
 
-const host = checkProviderHost('OLLAMA_HOST', 'http://127.0.0.1:11434');
-if (!host.ok) throw new Error(host.error);
-
+// The host defaults to http://127.0.0.1:11434. Anything else must be listed
+// in allowedHosts, or generateText returns an error before sending anything.
 const text: TextGenerator = new OllamaTextGenerator({
-  host: host.value,
   model: 'llama3.2',
+  host: 'http://gpu-box:11434',
+  allowedHosts: parseAllowedHosts('gpu-box'),
 });
 
 const result = await text.generateText({
@@ -78,18 +99,18 @@ Pass `images` to send pictures to a vision model.
    format, which is refused with a hint.
 3. In the exported JSON, set these placeholders:
 
-   | Placeholder         | Where                                      | Filled with                 |
-   | ------------------- | ------------------------------------------ | --------------------------- |
-   | `"{{INPUT_IMAGE}}"` | the LoadImage node's `image` (required)    | the uploaded image          |
-   | `{{PROMPT}}`        | anywhere inside a text value               | `request.prompt`            |
-   | `"{{SEED}}"`        | a sampler's `seed` (optional, whole value) | a random number on each run |
+   | Placeholder         | Where                                      | Filled with                                                                                               |
+   | ------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+   | `"{{INPUT_IMAGE}}"` | the LoadImage node's `image` (required)    | the uploaded image                                                                                        |
+   | `{{PROMPT}}`        | anywhere inside a text value               | `request.instructions`, a blank line, then `request.prompt` (just the prompt when instructions are blank) |
+   | `"{{SEED}}"`        | a sampler's `seed` (optional, whole value) | a random number on each run                                                                               |
 
 ```ts
 import { ComfyUiImageGenerator } from '@richardmcquiston01/ai-providers';
 import { directoryWorkflowSource } from '@richardmcquiston01/ai-providers/node';
 
 const image = new ComfyUiImageGenerator({
-  workflows: directoryWorkflowSource('comfyui-workflows'), // touch-up.json → mode "touch-up"
+  workflows: directoryWorkflowSource('comfyui-workflows'), // touch-up.json → mode "touch-up" (symbolic links are not followed)
   label: 'workflows in comfyui-workflows',
 });
 
@@ -188,6 +209,137 @@ const reply = await text.generateText({
 - Without the SDK installed, it returns an error naming the package. The
   `./claude` subpath is kept out of the main entry.
 
+### Image edits with Replicate
+
+Replicate is a hosted API with its own token (create one at
+replicate.com/account/api-tokens). It needs no extra package; it runs on
+`fetch`, so the main entry and the `./replicate` subpath both export it.
+
+```ts
+import { ReplicateImageGenerator } from '@richardmcquiston01/ai-providers/replicate';
+
+const apiKey: string = env.REPLICATE_API_TOKEN; // your app reads the token; the package never does
+
+// black-forest-labs/flux-kontext-pro unless you pass model
+const images = new ReplicateImageGenerator({ apiKey });
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- `model` is `owner/name` (its latest version) or `owner/name:version`.
+- Models name their inputs differently. The defaults are `prompt` and
+  `input_image`; set `promptInput` and `imageInput` for other models,
+  `referenceImagesInput` to accept extra reference images (a list), and
+  `input` for fixed extras such as `{ output_format: 'png' }`.
+- It creates a prediction, waits (the first request is held open for up to
+  30 s), polls every 2 s, then downloads the output. Replicate has no
+  system prompt, so `instructions` lead the prompt.
+- A prediction that runs past `runTimeoutMs` (default 5 minutes), or whose
+  `signal` is aborted, is cancelled on Replicate too, so it stops costing
+  money. `timeoutMs` (default 120 s) limits each HTTP call.
+- The output is only downloaded from HTTPS `replicate.delivery`, without
+  your token. Output must be PNG, JPEG or WebP.
+- Errors give the status and Replicate's message (a failed prediction
+  includes the model's own error).
+
+### Text and images with Grok
+
+Grok is xAI's hosted API with its own key (create one at console.x.ai).
+Text uses xAI's OpenAI-compatible endpoint, so it needs the `openai`
+package; images run on plain `fetch`.
+
+```bash
+bun add @richardmcquiston01/ai-providers openai
+```
+
+```ts
+import {
+  GrokImageGenerator,
+  GrokTextGenerator,
+} from '@richardmcquiston01/ai-providers/grok';
+
+const apiKey: string = env.XAI_API_KEY; // your app reads the key; the package never does
+
+const text = new GrokTextGenerator({ apiKey }); // grok-4 unless you pass model
+const reply = await text.generateText({
+  instructions: 'Rewrite captions to be short and friendly.',
+  prompt: 'Handmade oak coasters, set of 4',
+});
+
+const images = new GrokImageGenerator({ apiKey }); // grok-imagine-image unless you pass model
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- Text works like the OpenAI provider: `instructions` are the system
+  message, images (PNG, JPEG, WebP) go before the prompt, and a refusal is
+  an error. The endpoint is fixed to api.x.ai; the SDK can't fall back to
+  `OPENAI_BASE_URL` or other OpenAI environment settings.
+- Images call `POST /v1/images/edits` with a JSON body (the `openai`
+  SDK's `images.edit` sends multipart form data, which xAI doesn't accept).
+  It edits one image, so a request with reference images is refused.
+  `instructions` lead the prompt.
+- Model names change often; pass `model` to use another. The defaults
+  haven't been checked against a live account.
+- Errors give the status and xAI's message. `timeoutMs` (default 120 s) and
+  `signal` apply to both.
+
+### Text and images with OpenAI
+
+OpenAI is a hosted API with its own key (create one at
+platform.openai.com; a ChatGPT plan doesn't include API use). Install the
+SDK alongside:
+
+```bash
+bun add @richardmcquiston01/ai-providers openai
+```
+
+```ts
+import {
+  OpenAiImageGenerator,
+  OpenAiTextGenerator,
+} from '@richardmcquiston01/ai-providers/openai';
+
+const apiKey: string = env.OPENAI_API_KEY; // your app reads the key; the package never does
+
+const text = new OpenAiTextGenerator({ apiKey }); // gpt-5.5 unless you pass model
+const reply = await text.generateText({
+  instructions: 'Rewrite captions to be short and friendly.',
+  prompt: 'Handmade oak coasters, set of 4',
+});
+
+const images = new OpenAiImageGenerator({ apiKey }); // gpt-image-2 unless you pass model
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- Text uses Chat Completions: `instructions` become the system message;
+  images (PNG, JPEG, WebP) go before the prompt. A refusal comes back as an
+  error carrying the model's explanation.
+- Images use `images.edit`: the first image is edited, any others are
+  references. It has no system prompt, so `instructions` lead the prompt.
+  There is one mode, named after the model. `quality` (`low` … `high`) is
+  optional.
+- API errors come back with their status and OpenAI's message (401 says
+  the key is wrong, 404 to check the model). Credentials and the endpoint
+  come only from the options; the SDK isn't allowed to fall back to
+  `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` or `OPENAI_BASE_URL`.
+- `timeoutMs` (default 120 s) and `signal` cancel the request itself.
+- Without the SDK installed, it returns an error naming the package. The
+  `./openai` subpath is kept out of the main entry.
+
 ### Choosing providers from configuration
 
 Use `checkProviderHost` and `parseAllowedHosts` with your own settings:
@@ -228,14 +380,16 @@ without a network.
 
 ## Exports
 
-| Subpath     | What                                                                                            |
-| ----------- | ----------------------------------------------------------------------------------------------- |
-| `.`         | everything below except `./gemini`, `./claude` and `./node`                                     |
-| `./ollama`  | `OllamaTextGenerator`, `stripThinking`                                                          |
-| `./comfyui` | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
-| `./gemini`  | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
-| `./claude`  | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                               |
-| `./node`    | `directoryWorkflowSource` (Node/Bun only)                                                       |
+| Subpath       | What                                                                                            |
+| ------------- | ----------------------------------------------------------------------------------------------- |
+| `.`           | everything below except `./gemini`, `./claude`, `./openai`, `./grok` and `./node`               |
+| `./ollama`    | `OllamaTextGenerator`, `stripThinking`                                                          |
+| `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
+| `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
+| `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                               |
+| `./replicate` | `ReplicateImageGenerator`                                                                       |
+| `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                  |
+| `./node`      | `directoryWorkflowSource` (Node/Bun only)                                                       |
 
 ## Development
 
