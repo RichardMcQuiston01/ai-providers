@@ -20,10 +20,12 @@
       "peerDependencies": {
         "@anthropic-ai/sdk": ">=0.133.0 <1",
         "@richardmcquiston01/gemini-icon-gen": ">=0.3.0 <1",
+        "openai": ">=7.34.0 <8",
       },
       "optionalPeers": [
         "@anthropic-ai/sdk",
         "@richardmcquiston01/gemini-icon-gen",
+        "openai",
       ],
     },
   },
