@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 0.4.0
+
+### Minor Changes
+
+- e18de52: Add Grok (xAI) providers on the `./grok` subpath: `GrokTextGenerator` (through the optional `openai` peer, pointed at api.x.ai) and `GrokImageGenerator` (image edits over `fetch`). `./openai` now also exports `ChatCompletionsTextGenerator` and `ChatEndpoint` for OpenAI-compatible APIs.
+- 2ddead0: `OllamaTextGenerator` and `ComfyUiImageGenerator` now run `checkProviderHost` on their `host` (new `allowedHosts` and `allowedHostsLabel` options). A host that is not this machine and not allow-listed, is not an origin, or carries a username or password makes the call return an error instead of being used; an empty host falls back to the default. `checkProviderHost` no longer repeats the URL in its messages, refuses URLs with credentials, and matches IPv6 allow-list entries, trailing-dot names and IPv4-mapped loopback addresses.
+- 96101a4: Add OpenAI providers on the `./openai` subpath: `OpenAiTextGenerator` (Chat Completions, with optional images) and `OpenAiImageGenerator` (GPT Image edits). The `openai` package is an optional peer dependency.
+- 892a0d8: Add `ReplicateImageGenerator` (image edits with any Replicate image model, over plain `fetch`) on the `./replicate` subpath and the main entry. Error messages now include the `detail` field of Replicate-style error bodies.
+
+### Patch Changes
+
+- f87bff5: `ComfyUiImageGenerator` now puts `request.instructions` ahead of the prompt in `{{PROMPT}}` (as the other image providers do; blank instructions change nothing). When the caller aborts or the run time limit passes, it removes the prompt from ComfyUI's queue or interrupts it if it is the one running, and an abort no longer waits out the poll interval. New exported helper `promptWithInstructions`.
+- da4dca2: Image providers (Gemini, OpenAI, Grok, ComfyUI, Replicate) now return only PNG, JPEG or WebP, and `AiImage.mimeType` is decided from the returned bytes instead of a declared type (`output_format`, `Content-Type`, file extension). Other data, including SVG, is an error. Grok's WebP check now requires the full `RIFF`/`WEBP` marks. New exports: `IMAGE_TYPES`, `sniffImageType`, `checkImageOutput`; the input allow list is shared.
+- e708329: Provider HTTP calls no longer follow redirects (a redirect now returns an error naming the target); Replicate's output download follows one only to another `replicate.delivery` URL. Reply bodies are read through a size-capped stream, and a failed or truncated read returns an error instead of throwing. `callProvider` returns an error for an unusable `timeoutMs` or URL instead of throwing, and `readHistory` no longer throws on unexpected ComfyUI history entries. Replicate's run time limit now includes the create request.
+- c401b0c: `stripThinking` now removes nested `<think>` blocks completely and drops a block that is never closed (a truncated reply) from its tag to the end, so reasoning no longer leaks into the text.
+- 998b693: `directoryWorkflowSource` no longer follows symbolic links out of the workflows folder: it lists only regular `.json` files, reads a file only if its real path is inside the real folder (opened with `O_NOFOLLOW` where available), and applies one name rule to both `list` and `read` (no separators, `..`, `:` or NUL). A linked workflow file must be copied into the folder instead.
+
 ## 0.3.0
 
 ### Minor Changes
