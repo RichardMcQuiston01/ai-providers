@@ -13,6 +13,7 @@ export default defineConfig({
     grok: 'src/grok.ts',
     'openai-compatible': 'src/openai-compatible.ts',
     replicate: 'src/replicate.ts',
+    fal: 'src/fal.ts',
     node: 'src/node.ts',
   },
   format: ['esm', 'cjs'],

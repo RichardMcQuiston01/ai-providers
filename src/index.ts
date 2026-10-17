@@ -10,3 +10,4 @@ export * from './hosts.js';
 export * from './ollama.js';
 export * from './comfyui.js';
 export * from './replicate.js';
+export * from './fal.js';
