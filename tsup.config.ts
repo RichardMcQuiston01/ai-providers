@@ -16,6 +16,7 @@ export default defineConfig({
     fal: 'src/fal.ts',
     bfl: 'src/bfl.ts',
     stability: 'src/stability.ts',
+    sdwebui: 'src/sdwebui.ts',
     node: 'src/node.ts',
   },
   format: ['esm', 'cjs'],
