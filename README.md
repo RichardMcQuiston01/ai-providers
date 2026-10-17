@@ -23,6 +23,8 @@ today, a hosted API tomorrow, without changing the calling code.
 - **Grok** (`GrokTextGenerator`, `GrokImageGenerator`): text and photo
   edits with xAI's API; text uses the optional `openai` peer pointed at
   api.x.ai, images use plain `fetch`.
+- **fal** (`FalImageGenerator`): image edits with any fal model (FLUX and
+  more) through fal's queue, over plain `fetch` (no SDK needed).
 - **OpenAI-compatible text** (`OpenRouterTextGenerator`,
   `LmStudioTextGenerator`, `VllmTextGenerator`, `LlamaCppTextGenerator`,
   `OpenAiCompatibleTextGenerator`): text from OpenRouter or a local server
@@ -250,6 +252,44 @@ const edited = await images.generateImage({
 - Errors give the status and Replicate's message (a failed prediction
   includes the model's own error).
 
+### Image edits with fal
+
+fal is a hosted API with its own key (create one at fal.ai/dashboard/keys).
+It needs no extra package; it runs on `fetch`, so the main entry and the
+`./fal` subpath both export it.
+
+```ts
+import { FalImageGenerator } from '@richardmcquiston01/ai-providers/fal';
+
+const apiKey: string = env.FAL_KEY; // your app reads the key; the package never does
+
+// fal-ai/flux-pro/kontext unless you pass model
+const images = new FalImageGenerator({ apiKey });
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- `model` is fal's endpoint id, e.g. `fal-ai/flux-pro/kontext`.
+- Models name their inputs differently. The defaults are `prompt` and
+  `image_url`; set `promptInput` and `imageInput` for other models,
+  `referenceImagesInput` to accept extra reference images (a list), and
+  `input` for fixed extras such as `{ output_format: 'png' }`.
+- It submits the request to fal's queue, polls its status every second, reads
+  the result, then downloads the first image. fal has no system prompt, so
+  `instructions` lead the prompt.
+- A request that runs past `runTimeoutMs` (default 5 minutes), or whose
+  `signal` is aborted, is cancelled on fal too. `timeoutMs` (default 120 s)
+  limits each HTTP call.
+- The key is only sent to `queue.fal.run`: the status, result and cancel URLs
+  fal returns must be on that host. Output is only downloaded from HTTPS
+  `fal.media` or `fal.run` (and their subdomains), without your key; add
+  others with `outputHosts`. Output must be PNG, JPEG or WebP.
+- Errors give the status and fal's message.
+
 ### Text from OpenRouter and local OpenAI-compatible servers
 
 These use OpenAI's Chat Completions protocol through the optional `openai`
@@ -437,6 +477,7 @@ without a network.
 | `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource`          |
 | `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)              |
 | `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                                        |
+| `./fal`       | `FalImageGenerator`                                                                                      |
 | `./replicate` | `ReplicateImageGenerator`                                                                                |
 | `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                           |
 | `./node`      | `directoryWorkflowSource` (Node/Bun only)                                                                |

@@ -35,6 +35,8 @@ src/
                 go through checkProviderHost
   grok.ts       subpath ./grok: GrokTextGenerator (ChatCompletionsTextGenerator from openai.ts
                 pointed at api.x.ai), GrokImageGenerator (JSON POST /images/edits over fetch)
+  fal.ts        subpath ./fal: FalImageGenerator over plain fetch (queue submit, poll status, read result,
+                cancel on timeout/abort; key only goes to queue.fal.run, downloads from fal.media/fal.run only)
   replicate.ts  subpath ./replicate: ReplicateImageGenerator over plain fetch (create, poll,
                 cancel on timeout/abort, download from replicate.delivery only)
   openai.ts     subpath ./openai: OpenAiTextGenerator (Chat Completions), OpenAiImageGenerator
