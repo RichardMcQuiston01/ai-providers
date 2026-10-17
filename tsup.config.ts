@@ -14,6 +14,7 @@ export default defineConfig({
     'openai-compatible': 'src/openai-compatible.ts',
     replicate: 'src/replicate.ts',
     fal: 'src/fal.ts',
+    bfl: 'src/bfl.ts',
     node: 'src/node.ts',
   },
   format: ['esm', 'cjs'],
