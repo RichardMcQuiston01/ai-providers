@@ -1,7 +1,7 @@
 {
   "name": "@richardmcquiston01/ai-providers",
   "version": "0.4.0",
-  "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with Ollama, ComfyUI, Replicate, fal and Black Forest Labs adapters and Gemini, Claude, OpenAI and Grok (optional peers). Functions return Results instead of throwing; the core is runtime-neutral.",
+  "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with Ollama, ComfyUI, Replicate, fal, Black Forest Labs and Stability AI adapters and Gemini, Claude, OpenAI and Grok (optional peers). Functions return Results instead of throwing; the core is runtime-neutral.",
   "keywords": [
     "ai",
     "llm",
@@ -12,6 +12,7 @@
     "replicate",
     "fal",
     "flux",
+    "stable-diffusion",
     "grok",
     "openrouter",
     "llama-cpp",
@@ -73,6 +74,9 @@
       ],
       "bfl": [
         "./dist/bfl.d.cts"
+      ],
+      "stability": [
+        "./dist/stability.d.cts"
       ]
     }
   },
@@ -185,6 +189,16 @@
       "require": {
         "types": "./dist/bfl.d.cts",
         "default": "./dist/bfl.cjs"
+      }
+    },
+    "./stability": {
+      "import": {
+        "types": "./dist/stability.d.ts",
+        "default": "./dist/stability.js"
+      },
+      "require": {
+        "types": "./dist/stability.d.cts",
+        "default": "./dist/stability.cjs"
       }
     },
     "./node": {

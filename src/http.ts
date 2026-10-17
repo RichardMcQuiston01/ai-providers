@@ -197,6 +197,7 @@ export function providerMessage(body: string): string {
       error?: unknown;
       message?: unknown;
       detail?: unknown;
+      errors?: unknown;
     };
     const error: unknown = parsed.error;
     if (typeof error === 'string') return error;
@@ -207,6 +208,13 @@ export function providerMessage(body: string): string {
     if (typeof parsed.message === 'string') return parsed.message;
     // Replicate: {"title":"Unauthenticated","detail":"...","status":401}.
     if (typeof parsed.detail === 'string') return parsed.detail;
+    // Stability AI: {"name":"...","errors":["..."]}.
+    if (Array.isArray(parsed.errors)) {
+      const messages: string[] = parsed.errors.filter(
+        (entry: unknown): entry is string => typeof entry === 'string'
+      );
+      if (messages.length > 0) return messages.join('; ');
+    }
   } catch {
     // Not JSON; use the text.
   }

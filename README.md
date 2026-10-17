@@ -25,6 +25,9 @@ today, a hosted API tomorrow, without changing the calling code.
   api.x.ai, images use plain `fetch`.
 - **Black Forest Labs** (`BflImageGenerator`): FLUX Kontext image edits
   straight from the maker, over plain `fetch` (no SDK needed).
+- **Stability AI** (`StabilityImageGenerator`): Stable Image edits (image-to-image,
+  structure, search-and-replace, search-and-recolor, remove-background) over
+  plain `fetch` (no SDK needed).
 - **fal** (`FalImageGenerator`): image edits with any fal model (FLUX and
   more) through fal's queue, over plain `fetch` (no SDK needed).
 - **OpenAI-compatible text** (`OpenRouterTextGenerator`,
@@ -294,6 +297,41 @@ const edited = await images.generateImage({
   Delivered files are short-lived, so download them promptly (the provider
   already does). Output must be PNG, JPEG or WebP.
 
+### Image edits with Stability AI
+
+Stability AI's Stable Image API has its own key (create one at
+platform.stability.ai). It needs no extra package; it runs on `fetch`, so
+the main entry and the `./stability` subpath both export it.
+
+```ts
+import { StabilityImageGenerator } from '@richardmcquiston01/ai-providers/stability';
+
+const apiKey: string = env.STABILITY_API_KEY; // your app reads the key; the package never does
+
+// sd3.5-large unless you pass model; strength 0.6 unless you pass strength
+const images = new StabilityImageGenerator({ apiKey, strength: 0.5 });
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null, // image-to-image
+});
+```
+
+- `listModes()` returns `image-to-image` (the default), `structure`,
+  `search-and-replace`, `search-and-recolor` and `remove-background`.
+  `search-and-replace` needs `searchPrompt` (what to find; the prompt is
+  what replaces it) and `search-and-recolor` needs `selectPrompt`.
+- Each call is one request and one reply, so there is nothing to poll or
+  cancel; a timeout or aborted `signal` drops the connection. These calls
+  have no system prompt, so `instructions` lead the prompt. They edit one
+  image; a request with references is refused.
+- Send fixed extras (`negative_prompt`, `seed`, `style_preset`, ...) with
+  `input`. The fields the generator sets itself can't be overridden.
+- A result Stability filters (`CONTENT_FILTERED`) comes back as an error, as
+  do HTTP errors, with Stability's own message. The key is only sent to
+  `api.stability.ai`. Output must be PNG, JPEG or WebP.
+
 ### Image edits with fal
 
 fal is a hosted API with its own key (create one at fal.ai/dashboard/keys).
@@ -520,6 +558,7 @@ without a network.
 | `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)              |
 | `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                                        |
 | `./bfl`       | `BflImageGenerator`                                                                                      |
+| `./stability` | `StabilityImageGenerator`                                                                                |
 | `./fal`       | `FalImageGenerator`                                                                                      |
 | `./replicate` | `ReplicateImageGenerator`                                                                                |
 | `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                           |

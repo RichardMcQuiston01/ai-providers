@@ -15,6 +15,7 @@ export default defineConfig({
     replicate: 'src/replicate.ts',
     fal: 'src/fal.ts',
     bfl: 'src/bfl.ts',
+    stability: 'src/stability.ts',
     node: 'src/node.ts',
   },
   format: ['esm', 'cjs'],
