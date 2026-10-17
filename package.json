@@ -11,6 +11,10 @@
     "openai",
     "replicate",
     "grok",
+    "openrouter",
+    "llama-cpp",
+    "vllm",
+    "lm-studio",
     "comfyui",
     "image-generation",
     "text-generation",
@@ -58,6 +62,9 @@
       ],
       "grok": [
         "./dist/grok.d.cts"
+      ],
+      "openai-compatible": [
+        "./dist/openai-compatible.d.cts"
       ]
     }
   },
@@ -140,6 +147,16 @@
       "require": {
         "types": "./dist/grok.d.cts",
         "default": "./dist/grok.cjs"
+      }
+    },
+    "./openai-compatible": {
+      "import": {
+        "types": "./dist/openai-compatible.d.ts",
+        "default": "./dist/openai-compatible.js"
+      },
+      "require": {
+        "types": "./dist/openai-compatible.d.cts",
+        "default": "./dist/openai-compatible.cjs"
       }
     },
     "./node": {

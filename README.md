@@ -23,6 +23,10 @@ today, a hosted API tomorrow, without changing the calling code.
 - **Grok** (`GrokTextGenerator`, `GrokImageGenerator`): text and photo
   edits with xAI's API; text uses the optional `openai` peer pointed at
   api.x.ai, images use plain `fetch`.
+- **OpenAI-compatible text** (`OpenRouterTextGenerator`,
+  `LmStudioTextGenerator`, `VllmTextGenerator`, `LlamaCppTextGenerator`,
+  `OpenAiCompatibleTextGenerator`): text from OpenRouter or a local server
+  that speaks OpenAI's protocol, through the optional `openai` peer.
 - **Replicate** (`ReplicateImageGenerator`): image edits with any Replicate
   image model, over plain `fetch` (no SDK needed).
 - **OpenAI** (`OpenAiTextGenerator`, `OpenAiImageGenerator`): captions and
@@ -246,6 +250,52 @@ const edited = await images.generateImage({
 - Errors give the status and Replicate's message (a failed prediction
   includes the model's own error).
 
+### Text from OpenRouter and local OpenAI-compatible servers
+
+These use OpenAI's Chat Completions protocol through the optional `openai`
+package:
+
+```bash
+bun add @richardmcquiston01/ai-providers openai
+```
+
+```ts
+import {
+  LlamaCppTextGenerator,
+  LmStudioTextGenerator,
+  OpenRouterTextGenerator,
+  VllmTextGenerator,
+} from '@richardmcquiston01/ai-providers/openai-compatible';
+
+// Hosted: one OpenRouter key for many models (openrouter/auto unless you pass model).
+const hosted = new OpenRouterTextGenerator({
+  apiKey, // from openrouter.ai/keys; your app reads it, the package never does
+  model: 'anthropic/claude-sonnet-5-5',
+  appUrl: 'https://shop.example', // optional attribution headers
+  appName: 'My Shop',
+});
+
+// Local: a model name is required; the host defaults to the server's usual port.
+const lmStudio = new LmStudioTextGenerator({ model: 'qwen2.5-7b-instruct' }); // :1234
+const vllm = new VllmTextGenerator({ model: 'my-served-model' }); // :8000
+const llamaCpp = new LlamaCppTextGenerator({ model: 'any' }); // :8080
+```
+
+- Local servers are checked like Ollama: only this machine is accepted
+  unless the host is in `allowedHosts`, a URL with a password is refused,
+  and a bad host makes `generateText` return an error before anything is
+  sent. `apiPath` (default `/v1`) is where the API lives on the host.
+- Local servers need no key. Pass `apiKey` if you started yours with one.
+  The `openai` SDK is never allowed to read `OPENAI_API_KEY`,
+  `OPENAI_BASE_URL` or other OpenAI environment settings.
+- `OpenAiCompatibleTextGenerator` covers any other such server (Jan,
+  LocalAI, …); give it `host` and `model`, and optionally a `name`.
+- Behavior is the same as the OpenAI provider: `instructions` are the system
+  message, images (PNG, JPEG, WebP) go before the prompt, and a refusal is
+  an error. Whether a model accepts images depends on the model and server.
+- Without the `openai` package installed, it returns an error naming it. The
+  `./openai-compatible` subpath is kept out of the main entry.
+
 ### Text and images with Grok
 
 Grok is xAI's hosted API with its own key (create one at console.x.ai).
@@ -380,16 +430,16 @@ without a network.
 
 ## Exports
 
-| Subpath       | What                                                                                            |
-| ------------- | ----------------------------------------------------------------------------------------------- |
-| `.`           | everything below except `./gemini`, `./claude`, `./openai`, `./grok` and `./node`               |
-| `./ollama`    | `OllamaTextGenerator`, `stripThinking`                                                          |
-| `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
-| `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
-| `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                               |
-| `./replicate` | `ReplicateImageGenerator`                                                                       |
-| `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                  |
-| `./node`      | `directoryWorkflowSource` (Node/Bun only)                                                       |
+| Subpath       | What                                                                                                     |
+| ------------- | -------------------------------------------------------------------------------------------------------- |
+| `.`           | everything below except `./gemini`, `./claude`, `./openai`, `./grok`, `./openai-compatible` and `./node` |
+| `./ollama`    | `OllamaTextGenerator`, `stripThinking`                                                                   |
+| `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource`          |
+| `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)              |
+| `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                                        |
+| `./replicate` | `ReplicateImageGenerator`                                                                                |
+| `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                           |
+| `./node`      | `directoryWorkflowSource` (Node/Bun only)                                                                |
 
 ## Development
 

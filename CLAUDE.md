@@ -15,7 +15,7 @@ Gemini), and later Maker Toolkit. `ROADMAP.md` has what comes next
 
 ```
 src/
-  index.ts      barrel: everything except ./node, ./gemini, ./claude, ./openai and ./grok (runtime-neutral)
+  index.ts      barrel: everything except ./node, ./gemini, ./claude, ./openai, ./grok and ./openai-compatible (runtime-neutral)
   result.ts     Result<T>, ok, err, describeUnknownError
   port.ts       AiImage, TextGenerator, ImageGenerator, requests, FetchLike
   http.ts       callProvider (timeout + signal + specific errors), readJson,
@@ -30,6 +30,9 @@ src/
   claude.ts     subpath ./claude: ClaudeTextGenerator over the optional peer
                 @anthropic-ai/sdk (dynamic import(), injectable loadModule; tests run
                 the real SDK against a fake fetch)
+  openai-compatible.ts  subpath ./openai-compatible: OpenRouter and local-server (LM Studio, vLLM,
+                llama.cpp, generic) text generators built on ChatCompletionsTextGenerator; local hosts
+                go through checkProviderHost
   grok.ts       subpath ./grok: GrokTextGenerator (ChatCompletionsTextGenerator from openai.ts
                 pointed at api.x.ai), GrokImageGenerator (JSON POST /images/edits over fetch)
   replicate.ts  subpath ./replicate: ReplicateImageGenerator over plain fetch (create, poll,
@@ -42,7 +45,7 @@ test/           node:test + node:assert, run by bun test; fake fetch, no network
 ```
 
 Adding a provider: `src/<provider>.ts`, export it from `src/index.ts` (unless
-it loads an optional peer, like `gemini.ts`, `claude.ts`, `openai.ts` and `grok.ts`), add
+it loads an optional peer, like `gemini.ts`, `claude.ts`, `openai.ts`, `grok.ts` and `openai-compatible.ts`), add
 the entry to `tsup.config.ts`, `package.json` `exports` and `typesVersions`,
 test it against a fake `fetch`, and add a changeset. A provider whose SDK
 is heavy (Gemini, Claude, OpenAI) takes it as an **optional peer dependency**
