@@ -1,14 +1,20 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
-import { DEFAULT_AI_TIMEOUT_MS, toBase64 } from './http.js';
-import { IMAGE_TYPES } from './images.js';
+import {
+  DEFAULT_AI_TIMEOUT_MS,
+  describeSdkError,
+  isAborted,
+  loadOptionalPackage,
+  toBase64,
+} from './http.js';
+import { IMAGE_TYPES, checkImageInput } from './images.js';
 import type {
   AiImage,
   TextGenerator,
   TextRequest,
   TextResult,
 } from './port.js';
-import { describeUnknownError, err, ok, type Result } from './result.js';
+import { err, ok, type Result } from './result.js';
 
 /** The optional peer package the Claude provider is built on. */
 export const CLAUDE_PACKAGE = '@anthropic-ai/sdk';
@@ -58,18 +64,8 @@ export interface ClaudeOptions {
 
 const loadClaudePackage: ClaudeModuleLoader = () => import('@anthropic-ai/sdk');
 
-async function loadModule(
-  loader: ClaudeModuleLoader
-): Promise<Result<ClaudeModule>> {
-  try {
-    return ok(await loader());
-  } catch (cause: unknown) {
-    return err(
-      `The Claude provider needs the optional package ${CLAUDE_PACKAGE}; ` +
-        `install it (e.g. bun add ${CLAUDE_PACKAGE}). Loading it failed: ${describeUnknownError(cause)}`,
-      cause
-    );
-  }
+function loadModule(loader: ClaudeModuleLoader): Promise<Result<ClaudeModule>> {
+  return loadOptionalPackage(loader, 'Claude', CLAUDE_PACKAGE);
 }
 
 function toImageBlock(
@@ -77,12 +73,13 @@ function toImageBlock(
   index: number
 ): Result<Anthropic.Beta.BetaImageBlockParam> {
   const label = `Image ${index + 1}`;
-  if (!CLAUDE_IMAGE_TYPES.has(image.mimeType)) {
-    return err(
-      `${label} is ${image.mimeType}; Claude takes PNG, JPEG, WebP or GIF.`
-    );
-  }
-  if (image.data.length === 0) return err(`${label} is empty.`);
+  const checked: Result<AiImage> = checkImageInput(
+    image,
+    label,
+    'Claude',
+    CLAUDE_IMAGE_TYPES
+  );
+  if (!checked.ok) return checked;
   return ok({
     type: 'image',
     source: {
@@ -91,41 +88,6 @@ function toImageBlock(
       data: toBase64(image.data),
     },
   });
-}
-
-function isAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
-}
-
-/** A specific message for an SDK error: the status, Anthropic's message, and the likely fix. */
-function describeApiError(
-  sdk: ClaudeModule,
-  what: string,
-  cause: unknown
-): string {
-  const {
-    APIError,
-    AuthenticationError,
-    PermissionDeniedError,
-    NotFoundError,
-    RateLimitError,
-  } = sdk.default;
-  if (cause instanceof AuthenticationError) {
-    return `${what} was refused (401): the API key isn't valid. Create one in the Claude Console.`;
-  }
-  if (cause instanceof PermissionDeniedError) {
-    return `${what} was refused (403): ${cause.message}`;
-  }
-  if (cause instanceof NotFoundError) {
-    return `${what} failed (404): ${cause.message}. Check the model name.`;
-  }
-  if (cause instanceof RateLimitError) {
-    return `${what} was rate limited (429): ${cause.message}. Try again shortly.`;
-  }
-  if (cause instanceof APIError) {
-    return `${what} failed (${cause.status ?? 'no status'}): ${cause.message}`;
-  }
-  return `${what} failed: ${describeUnknownError(cause)}`;
 }
 
 /**
@@ -207,7 +169,15 @@ export class ClaudeTextGenerator implements TextGenerator {
           cause
         );
       }
-      return err(describeApiError(sdk.value, what, cause), cause);
+      return err(
+        describeSdkError(
+          sdk.value.default,
+          what,
+          cause,
+          'create one in the Claude Console'
+        ),
+        cause
+      );
     }
 
     if (message.stop_reason === 'refusal') {

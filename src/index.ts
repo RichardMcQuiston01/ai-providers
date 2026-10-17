@@ -1,7 +1,7 @@
 // Runtime-neutral entry: everything except the Node-only `./node` subpath
 // and the subpaths that load an optional peer package (`./gemini`,
-// `./claude`, `./openai`, `./grok`), so importing the package never needs
-// those packages installed.
+// `./claude`, `./openai`, `./grok`, `./openai-compatible`), so importing
+// the package never needs those packages installed.
 export * from './result.js';
 export * from './port.js';
 export * from './images.js';

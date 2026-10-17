@@ -1,5 +1,5 @@
 import { checkProviderHost } from './hosts.js';
-import { callProvider, readBytes, readJson } from './http.js';
+import { callProvider, isAborted, readBytes, readJson } from './http.js';
 import { checkImageOutput } from './images.js';
 import {
   promptWithInstructions,
@@ -525,8 +525,4 @@ export class ComfyUiImageGenerator implements ImageGenerator {
     if (data.length === 0) return err(`${what}: the image is empty`);
     return checkImageOutput(data, what);
   }
-}
-
-function isAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
 }

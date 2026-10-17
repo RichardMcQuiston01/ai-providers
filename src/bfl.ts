@@ -1,11 +1,12 @@
 import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
+  isAborted,
   readBytes,
   readJson,
   toBase64,
 } from './http.js';
-import { IMAGE_TYPES, checkImageOutput } from './images.js';
+import { checkImageInput, checkImageOutput } from './images.js';
 import {
   promptWithInstructions,
   type AiImage,
@@ -57,17 +58,13 @@ export interface BflImageOptions {
   readonly now?: () => number;
 }
 
-function isAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
-}
-
 function toBase64Input(image: AiImage, label: string): Result<string> {
-  if (!IMAGE_TYPES.has(image.mimeType)) {
-    return err(
-      `${label} is ${image.mimeType}; Black Forest Labs takes PNG, JPEG or WebP.`
-    );
-  }
-  if (image.data.length === 0) return err(`${label} is empty.`);
+  const checked: Result<AiImage> = checkImageInput(
+    image,
+    label,
+    'Black Forest Labs'
+  );
+  if (!checked.ok) return checked;
   return ok(toBase64(image.data));
 }
 

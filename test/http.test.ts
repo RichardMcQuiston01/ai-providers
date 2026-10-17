@@ -4,6 +4,8 @@ import { describe, it } from 'node:test';
 import {
   callProvider,
   err,
+  isAborted,
+  loadOptionalPackage,
   ok,
   readBytes,
   readHistory,
@@ -321,5 +323,33 @@ void describe('readHistory with unexpected shapes', () => {
   void it('reports a history entry that is not an object', () => {
     assert.match(errorOf(readHistory({ p: null }, 'p')), /not an object/);
     assert.match(errorOf(readHistory({ p: 'x' }, 'p')), /not an object/);
+  });
+});
+
+void describe('isAborted and loadOptionalPackage', () => {
+  void it('isAborted is true only once the signal has fired', () => {
+    const controller = new AbortController();
+    assert.equal(isAborted(undefined), false);
+    assert.equal(isAborted(controller.signal), false);
+    controller.abort();
+    assert.equal(isAborted(controller.signal), true);
+  });
+
+  void it('loadOptionalPackage names the package and how to install it', async () => {
+    const result = await loadOptionalPackage(
+      () => Promise.reject(new Error('Cannot find module')),
+      'Demo',
+      'demo-sdk',
+      ' (1.0 or later)'
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(
+        result.error,
+        /^The Demo provider needs the optional package demo-sdk \(1\.0 or later\)/
+      );
+      assert.match(result.error, /bun add demo-sdk/);
+      assert.match(result.error, /Cannot find module/);
+    }
   });
 });

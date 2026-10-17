@@ -5,7 +5,7 @@ import {
   readJson,
   toBase64,
 } from './http.js';
-import { IMAGE_TYPES, checkImageOutput } from './images.js';
+import { checkImageInput, checkImageOutput } from './images.js';
 import {
   ChatCompletionsTextGenerator,
   type ChatEndpoint,
@@ -57,12 +57,12 @@ export interface GrokImageOptions {
 }
 
 function toDataUri(image: AiImage): Result<string> {
-  if (!IMAGE_TYPES.has(image.mimeType)) {
-    return err(
-      `The image to edit is ${image.mimeType}; Grok takes PNG, JPEG or WebP.`
-    );
-  }
-  if (image.data.length === 0) return err('The image to edit is empty.');
+  const checked: Result<AiImage> = checkImageInput(
+    image,
+    'The image to edit',
+    'Grok'
+  );
+  if (!checked.ok) return checked;
   return ok(`data:${image.mimeType};base64,${toBase64(image.data)}`);
 }
 
