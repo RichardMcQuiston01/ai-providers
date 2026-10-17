@@ -23,6 +23,8 @@ today, a hosted API tomorrow, without changing the calling code.
 - **Grok** (`GrokTextGenerator`, `GrokImageGenerator`): text and photo
   edits with xAI's API; text uses the optional `openai` peer pointed at
   api.x.ai, images use plain `fetch`.
+- **Black Forest Labs** (`BflImageGenerator`): FLUX Kontext image edits
+  straight from the maker, over plain `fetch` (no SDK needed).
 - **fal** (`FalImageGenerator`): image edits with any fal model (FLUX and
   more) through fal's queue, over plain `fetch` (no SDK needed).
 - **OpenAI-compatible text** (`OpenRouterTextGenerator`,
@@ -252,6 +254,46 @@ const edited = await images.generateImage({
 - Errors give the status and Replicate's message (a failed prediction
   includes the model's own error).
 
+### Image edits with Black Forest Labs
+
+Black Forest Labs (BFL) makes FLUX. It is a hosted API with its own key
+(create one at dashboard.bfl.ai). It needs no extra package; it runs on
+`fetch`, so the main entry and the `./bfl` subpath both export it.
+
+```ts
+import { BflImageGenerator } from '@richardmcquiston01/ai-providers/bfl';
+
+const apiKey: string = env.BFL_API_KEY; // your app reads the key; the package never does
+
+// flux-kontext-pro unless you pass model (e.g. flux-kontext-max)
+const images = new BflImageGenerator({
+  apiKey,
+  input: { output_format: 'png' },
+});
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- It submits a task, polls the task's URL every second until it is `Ready`,
+  then downloads the image. BFL has no system prompt, so `instructions` lead
+  the prompt.
+- The defaults are `prompt` and `input_image`; change `promptInput` and
+  `imageInput` for other models, name one field per extra reference image in
+  `referenceImageInputs` (e.g. `['input_image_2']`), and send fixed extras
+  with `input`.
+- Moderation, errors and expired tasks come back as errors that say which.
+  BFL has no cancel call, so a task you stop waiting for (`runTimeoutMs`,
+  default 5 minutes, or an aborted `signal`) may still run and be billed.
+- The key is only sent to `bfl.ai` (the polling URL BFL returns must be
+  there, regional hosts included). Output is only downloaded from HTTPS
+  `bfl.ai` subdomains, without your key; add others with `outputHosts`.
+  Delivered files are short-lived, so download them promptly (the provider
+  already does). Output must be PNG, JPEG or WebP.
+
 ### Image edits with fal
 
 fal is a hosted API with its own key (create one at fal.ai/dashboard/keys).
@@ -477,6 +519,7 @@ without a network.
 | `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource`          |
 | `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)              |
 | `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                                        |
+| `./bfl`       | `BflImageGenerator`                                                                                      |
 | `./fal`       | `FalImageGenerator`                                                                                      |
 | `./replicate` | `ReplicateImageGenerator`                                                                                |
 | `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                           |

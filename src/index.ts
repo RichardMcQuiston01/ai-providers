@@ -11,3 +11,4 @@ export * from './ollama.js';
 export * from './comfyui.js';
 export * from './replicate.js';
 export * from './fal.js';
+export * from './bfl.js';
