@@ -15,7 +15,7 @@ Gemini), and later Maker Toolkit. `ROADMAP.md` has what comes next
 
 ```
 src/
-  index.ts      barrel: everything except ./node, ./gemini, ./claude, ./openai, ./grok and ./openai-compatible (runtime-neutral)
+  index.ts      barrel: everything except ./node, ./gemini, ./claude, ./openai, ./grok, ./openai-compatible and ./providers (runtime-neutral)
   result.ts     Result<T>, ok, err, describeUnknownError
   port.ts       AiImage, TextGenerator, ImageGenerator, requests, FetchLike
   http.ts       callProvider (timeout + signal + specific errors), readJson,
@@ -48,12 +48,16 @@ src/
   openai.ts     subpath ./openai: OpenAiTextGenerator (Chat Completions), OpenAiImageGenerator
                 (images.edit) over the optional peer openai (dynamic import(), injectable
                 loadModule; tests run the real SDK against a fake fetch)
+  providers.ts  subpath ./providers: createTextGenerator, createImageGenerator, createProviders from plain
+                settings objects ({ provider: 'name', ...that provider's options }); imports every provider, so it
+                stays out of the barrel
   node.ts       subpath ./node: directoryWorkflowSource (the only node:* code)
 test/           node:test + node:assert, run by bun test; fake fetch, no network
 ```
 
 Adding a provider: `src/<provider>.ts`, export it from `src/index.ts` (unless
 it loads an optional peer, like `gemini.ts`, `claude.ts`, `openai.ts`, `grok.ts` and `openai-compatible.ts`), add
+its entry to `src/providers.ts` (the config unions, the name lists and the switch), add
 the entry to `tsup.config.ts`, `package.json` `exports` and `typesVersions`,
 test it against a fake `fetch`, and add a changeset. A provider whose SDK
 is heavy (Gemini, Claude, OpenAI) takes it as an **optional peer dependency**

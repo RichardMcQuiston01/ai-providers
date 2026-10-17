@@ -81,6 +81,9 @@
       ],
       "sdwebui": [
         "./dist/sdwebui.d.cts"
+      ],
+      "providers": [
+        "./dist/providers.d.cts"
       ]
     }
   },
@@ -213,6 +216,16 @@
       "require": {
         "types": "./dist/sdwebui.d.cts",
         "default": "./dist/sdwebui.cjs"
+      }
+    },
+    "./providers": {
+      "import": {
+        "types": "./dist/providers.d.ts",
+        "default": "./dist/providers.js"
+      },
+      "require": {
+        "types": "./dist/providers.d.cts",
+        "default": "./dist/providers.cjs"
       }
     },
     "./node": {

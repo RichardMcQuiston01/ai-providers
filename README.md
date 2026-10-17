@@ -551,6 +551,31 @@ const edited = await images.generateImage({
 
 ### Choosing providers from configuration
 
+`createProviders` turns plain settings (a settings file, a form) into
+generators, so an app doesn't write the same switch. `provider` names the
+provider and the rest are that provider's own options. Keys are passed in;
+the package never reads the environment.
+
+```ts
+import { createProviders } from '@richardmcquiston01/ai-providers/providers';
+
+const built = createProviders({
+  text: { provider: 'ollama', model: 'llama3.2' },
+  image: { provider: 'stability', apiKey: settings.stabilityKey },
+});
+if (!built.ok) return console.error(built.error); // e.g. an unknown provider name
+const { text, image } = built.value; // each null when not configured
+```
+
+- `createTextGenerator` and `createImageGenerator` build one of each;
+  `TEXT_PROVIDERS` and `IMAGE_PROVIDERS` list the accepted names for a
+  dropdown. An unknown name is an error that lists the valid ones.
+- `provider: 'comfyui'` needs a `workflows` source (see above); the
+  `openai-compatible` text provider needs a `host`.
+- The `./providers` subpath imports every provider, so it is kept out of
+  the main entry. The optional peers (`openai`, `@anthropic-ai/sdk`, ...)
+  still load only when a provider that needs one is used.
+
 Use `checkProviderHost` and `parseAllowedHosts` with your own settings:
 
 ```ts
@@ -589,20 +614,21 @@ without a network.
 
 ## Exports
 
-| Subpath       | What                                                                                                     |
-| ------------- | -------------------------------------------------------------------------------------------------------- |
-| `.`           | everything below except `./gemini`, `./claude`, `./openai`, `./grok`, `./openai-compatible` and `./node` |
-| `./ollama`    | `OllamaTextGenerator`, `stripThinking`                                                                   |
-| `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource`          |
-| `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)              |
-| `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                                        |
-| `./bfl`       | `BflImageGenerator`                                                                                      |
-| `./stability` | `StabilityImageGenerator`                                                                                |
-| `./sdwebui`   | `SdWebUiImageGenerator`                                                                                  |
-| `./fal`       | `FalImageGenerator`                                                                                      |
-| `./replicate` | `ReplicateImageGenerator`                                                                                |
-| `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                           |
-| `./node`      | `directoryWorkflowSource` (Node/Bun only)                                                                |
+| Subpath       | What                                                                                                                    |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `.`           | everything below except `./gemini`, `./claude`, `./openai`, `./grok`, `./openai-compatible`, `./providers` and `./node` |
+| `./ollama`    | `OllamaTextGenerator`, `stripThinking`                                                                                  |
+| `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource`                         |
+| `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)                             |
+| `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                                                       |
+| `./bfl`       | `BflImageGenerator`                                                                                                     |
+| `./stability` | `StabilityImageGenerator`                                                                                               |
+| `./sdwebui`   | `SdWebUiImageGenerator`                                                                                                 |
+| `./fal`       | `FalImageGenerator`                                                                                                     |
+| `./replicate` | `ReplicateImageGenerator`                                                                                               |
+| `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                                          |
+| `./providers` | `createProviders`, `createTextGenerator`, `createImageGenerator`, `TEXT_PROVIDERS`, `IMAGE_PROVIDERS`                   |
+| `./node`      | `directoryWorkflowSource` (Node/Bun only)                                                                               |
 
 ## Development
 
