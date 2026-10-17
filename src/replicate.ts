@@ -1,11 +1,12 @@
 import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
+  isAborted,
   readBytes,
   readJson,
   toBase64,
 } from './http.js';
-import { IMAGE_TYPES, checkImageOutput } from './images.js';
+import { checkImageInput, checkImageOutput } from './images.js';
 import {
   promptWithInstructions,
   type AiImage,
@@ -75,17 +76,9 @@ function parseModel(model: string): Result<ModelRef> {
     : ok({ path: '/predictions', body: { version } });
 }
 
-function isAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
-}
-
 function toDataUri(image: AiImage, label: string): Result<string> {
-  if (!IMAGE_TYPES.has(image.mimeType)) {
-    return err(
-      `${label} is ${image.mimeType}; Replicate models here take PNG, JPEG or WebP.`
-    );
-  }
-  if (image.data.length === 0) return err(`${label} is empty.`);
+  const checked: Result<AiImage> = checkImageInput(image, label, 'Replicate');
+  if (!checked.ok) return checked;
   return ok(`data:${image.mimeType};base64,${toBase64(image.data)}`);
 }
 

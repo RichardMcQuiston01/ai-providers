@@ -56,3 +56,37 @@ export function checkImageOutput(
   }
   return ok({ mimeType, data });
 }
+
+const IMAGE_TYPE_NAMES: ReadonlyMap<string, string> = new Map([
+  ['image/png', 'PNG'],
+  ['image/jpeg', 'JPEG'],
+  ['image/webp', 'WebP'],
+  ['image/gif', 'GIF'],
+]);
+
+/**
+ * An image a caller passed in: PNG, JPEG or WebP (or `allowed`, for a
+ * provider that takes more), and not empty. `label` names the image
+ * ("Image 2") and `providerLabel` the provider, for the message.
+ */
+export function checkImageInput(
+  image: AiImage,
+  label: string,
+  providerLabel: string,
+  allowed: ReadonlySet<string> = IMAGE_TYPES
+): Result<AiImage> {
+  if (!allowed.has(image.mimeType)) {
+    const names: string[] = [...allowed].map(
+      (type: string) => IMAGE_TYPE_NAMES.get(type) ?? type
+    );
+    const list: string =
+      names.length > 1
+        ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`
+        : (names[0] ?? 'no image types');
+    return err(
+      `${label} is ${image.mimeType}; ${providerLabel} takes ${list}.`
+    );
+  }
+  if (image.data.length === 0) return err(`${label} is empty.`);
+  return ok(image);
+}

@@ -1,7 +1,14 @@
 import type OpenAI from 'openai';
 
-import { DEFAULT_AI_TIMEOUT_MS, fromBase64, toBase64 } from './http.js';
-import { IMAGE_TYPES, checkImageOutput } from './images.js';
+import {
+  DEFAULT_AI_TIMEOUT_MS,
+  describeSdkError,
+  fromBase64,
+  isAborted,
+  loadOptionalPackage,
+  toBase64,
+} from './http.js';
+import { checkImageInput, checkImageOutput } from './images.js';
 import {
   promptWithInstructions,
   type AiImage,
@@ -12,7 +19,7 @@ import {
   type TextRequest,
   type TextResult,
 } from './port.js';
-import { describeUnknownError, err, ok, type Result } from './result.js';
+import { err, ok, type Result } from './result.js';
 
 /** The optional peer package the OpenAI providers are built on. */
 export const OPENAI_PACKAGE = 'openai';
@@ -84,19 +91,11 @@ const loadOpenAiPackage: OpenAiModuleLoader = () => import('openai');
  * Loads the peer package, or explains how to install it. A failed load is
  * not cached, so installing the package fixes it without a restart.
  */
-async function loadModule(
+function loadModule(
   loader: OpenAiModuleLoader,
   endpoint: ChatEndpoint
 ): Promise<Result<OpenAiModule>> {
-  try {
-    return ok(await loader());
-  } catch (cause: unknown) {
-    return err(
-      `The ${endpoint.label} provider needs the optional package ${OPENAI_PACKAGE}; ` +
-        `install it (e.g. bun add ${OPENAI_PACKAGE}). Loading it failed: ${describeUnknownError(cause)}`,
-      cause
-    );
-  }
+  return loadOptionalPackage(loader, endpoint.label, OPENAI_PACKAGE);
 }
 
 function checkKey(apiKey: string, endpoint: ChatEndpoint): Result<string> {
@@ -134,61 +133,12 @@ function createClient(
   });
 }
 
-function isAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
-}
-
 function checkImage(
   image: AiImage,
   label: string,
   endpoint: ChatEndpoint
 ): Result<AiImage> {
-  if (!IMAGE_TYPES.has(image.mimeType)) {
-    return err(
-      `${label} is ${image.mimeType}; ${endpoint.label} takes PNG, JPEG or WebP.`
-    );
-  }
-  if (image.data.length === 0) return err(`${label} is empty.`);
-  return ok(image);
-}
-
-/** The SDK prefixes its messages with the status ("400 Bad ..."); the status is already in ours. */
-function messageOf(cause: InstanceType<OpenAiModule['APIError']>): string {
-  return cause.status === undefined
-    ? cause.message
-    : cause.message.replace(new RegExp(`^${cause.status} `), '');
-}
-
-/** A specific message for an SDK error: the status, the provider's message, and the likely fix. */
-function describeApiError(
-  sdk: OpenAiModule,
-  what: string,
-  cause: unknown,
-  endpoint: ChatEndpoint
-): string {
-  const {
-    APIError,
-    AuthenticationError,
-    PermissionDeniedError,
-    NotFoundError,
-    RateLimitError,
-  } = sdk;
-  if (cause instanceof AuthenticationError) {
-    return `${what} was refused (401): the API key isn't valid; check it, or ${endpoint.keyHelp}.`;
-  }
-  if (cause instanceof PermissionDeniedError) {
-    return `${what} was refused (403): ${messageOf(cause)}`;
-  }
-  if (cause instanceof NotFoundError) {
-    return `${what} failed (404): ${messageOf(cause)}. Check the model name.`;
-  }
-  if (cause instanceof RateLimitError) {
-    return `${what} was rate limited (429): ${messageOf(cause)}. Try again shortly.`;
-  }
-  if (cause instanceof APIError) {
-    return `${what} failed (${cause.status ?? 'no status'}): ${messageOf(cause)}`;
-  }
-  return `${what} failed: ${describeUnknownError(cause)}`;
+  return checkImageInput(image, label, endpoint.label);
 }
 
 /** The error for a thrown SDK call: cancelled, timed out, or described by status. */
@@ -204,7 +154,7 @@ function describeFailure(
   if (cause instanceof sdk.APIConnectionTimeoutError) {
     return `${what} took longer than ${Math.round(timeoutMs / 1000)} s and was stopped`;
   }
-  return describeApiError(sdk, what, cause, endpoint);
+  return describeSdkError(sdk, what, cause, `check it, or ${endpoint.keyHelp}`);
 }
 
 /**

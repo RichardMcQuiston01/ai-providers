@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { checkImageOutput, IMAGE_TYPES, sniffImageType } from '../src/index.js';
+import {
+  checkImageInput,
+  checkImageOutput,
+  IMAGE_TYPES,
+  sniffImageType,
+} from '../src/index.js';
 
 const ascii = (text: string): number[] => [...text].map((c) => c.charCodeAt(0));
 const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0];
@@ -66,5 +71,44 @@ void describe('checkImageOutput', () => {
       'image/png',
       'image/webp',
     ]);
+  });
+});
+
+void describe('checkImageInput', () => {
+  const png = { mimeType: 'image/png', data: new Uint8Array(PNG) };
+
+  void it('passes a non-empty PNG, JPEG or WebP', () => {
+    assert.equal(checkImageInput(png, 'Image 1', 'Test').ok, true);
+  });
+
+  void it('names the label, type and provider for a type it does not take', () => {
+    const result = checkImageInput(
+      { mimeType: 'image/gif', data: new Uint8Array(PNG) },
+      'Image 2',
+      'Test'
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(
+        result.error,
+        'Image 2 is image/gif; Test takes PNG, JPEG or WebP.'
+      );
+    }
+  });
+
+  void it('accepts the extra types a provider passes in', () => {
+    const allowed = new Set([...IMAGE_TYPES, 'image/gif']);
+    const gif = { mimeType: 'image/gif', data: new Uint8Array(PNG) };
+    assert.equal(checkImageInput(gif, 'Image 1', 'Test', allowed).ok, true);
+  });
+
+  void it('refuses an empty image', () => {
+    const result = checkImageInput(
+      { mimeType: 'image/png', data: new Uint8Array() },
+      'Image 1',
+      'Test'
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error, 'Image 1 is empty.');
   });
 });
