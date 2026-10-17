@@ -2,8 +2,8 @@
 
 Done: Ollama and ComfyUI (0.1.0), Gemini text and image edits (`./gemini`),
 Claude text (`./claude`), OpenAI text and image edits (`./openai`),
-Replicate, fal and Black Forest Labs image edits (`./replicate`,
-`./fal`, `./bfl`), Grok text and image edits
+Replicate, fal, Black Forest Labs and Stability AI image edits
+(`./replicate`, `./fal`, `./bfl`, `./stability`), Grok text and image edits
 (`./grok`), OpenRouter, LM Studio, vLLM and llama.cpp server text
 (`./openai-compatible`).
 
@@ -13,9 +13,7 @@ Replicate, fal and Black Forest Labs image edits (`./replicate`,
    environment.
 2. **Model listing**: `listModels()` for Ollama (`GET /api/tags`), for a
    settings page's dropdown.
-3. **Stability AI** (`./stability`): `StabilityImageGenerator`, Stable
-   Image edits over `fetch`.
-4. **Stable Diffusion local API** (`./sdwebui`): `SdWebUiImageGenerator`
+3. **Stable Diffusion local API** (`./sdwebui`): `SdWebUiImageGenerator`
    for the AUTOMATIC1111 / Forge web UI's `/sdapi/v1/img2img`, with the
    same host check as ComfyUI.
 
