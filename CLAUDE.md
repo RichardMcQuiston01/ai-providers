@@ -39,6 +39,8 @@ src/
                 bfl.ai only; key only goes to bfl.ai; BFL has no cancel call)
   stability.ts  subpath ./stability: StabilityImageGenerator over plain fetch (multipart POST to
                 api.stability.ai/v2beta, JSON reply with base64 image; modes map to endpoints)
+  sdwebui.ts    subpath ./sdwebui: SdWebUiImageGenerator over plain fetch (JSON POST /sdapi/v1/img2img to an
+                AUTOMATIC1111/Forge host through checkProviderHost; inpaint takes the second image as mask)
   fal.ts        subpath ./fal: FalImageGenerator over plain fetch (queue submit, poll status, read result,
                 cancel on timeout/abort; key only goes to queue.fal.run, downloads from fal.media/fal.run only)
   replicate.ts  subpath ./replicate: ReplicateImageGenerator over plain fetch (create, poll,

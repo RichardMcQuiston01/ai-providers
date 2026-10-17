@@ -28,6 +28,9 @@ today, a hosted API tomorrow, without changing the calling code.
 - **Stability AI** (`StabilityImageGenerator`): Stable Image edits (image-to-image,
   structure, search-and-replace, search-and-recolor, remove-background) over
   plain `fetch` (no SDK needed).
+- **Stable Diffusion web UI** (`SdWebUiImageGenerator`): image edits with a
+  local AUTOMATIC1111 or Forge web UI, over plain `fetch`, with the same
+  host check as ComfyUI.
 - **fal** (`FalImageGenerator`): image edits with any fal model (FLUX and
   more) through fal's queue, over plain `fetch` (no SDK needed).
 - **OpenAI-compatible text** (`OpenRouterTextGenerator`,
@@ -332,6 +335,42 @@ const edited = await images.generateImage({
   do HTTP errors, with Stability's own message. The key is only sent to
   `api.stability.ai`. Output must be PNG, JPEG or WebP.
 
+### Image edits with a local Stable Diffusion web UI
+
+`SdWebUiImageGenerator` talks to an AUTOMATIC1111 or Forge web UI started
+with `--api` (`POST /sdapi/v1/img2img`). It needs no extra package and no
+key; like ComfyUI it only calls this machine unless you list the host.
+
+```ts
+import { SdWebUiImageGenerator } from '@richardmcquiston01/ai-providers/sdwebui';
+
+// host defaults to http://127.0.0.1:7860; the loaded checkpoint is used unless you pass model
+const images = new SdWebUiImageGenerator({
+  denoisingStrength: 0.5,
+  input: { steps: 25, negative_prompt: 'blurry' },
+});
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null, // img2img
+});
+```
+
+- Modes are `img2img` (the default) and `inpaint`, which takes a mask as
+  the second image (white = redraw, black = keep).
+- A PNG input keeps its own size; pass `width` and `height` for other
+  inputs, or the web UI falls back to 512 x 512. The web UI has no system
+  prompt, so `instructions` lead the prompt.
+- Send `negative_prompt`, `steps`, `cfg_scale`, `sampler_name`, `seed` and
+  other fields with `input`; the fields the generator sets itself can't be
+  overridden. `model` switches the checkpoint for the call.
+- There is no job to cancel: the API's interrupt stops whatever the server
+  is running, so a timeout or aborted `signal` stops waiting and leaves the
+  web UI to finish. Raise `timeoutMs` (default 2 minutes) for slow GPUs.
+- Hosts follow `checkProviderHost`: `allowedHosts` (see `parseAllowedHosts`)
+  to reach a GPU box on your network.
+
 ### Image edits with fal
 
 fal is a hosted API with its own key (create one at fal.ai/dashboard/keys).
@@ -559,6 +598,7 @@ without a network.
 | `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                                        |
 | `./bfl`       | `BflImageGenerator`                                                                                      |
 | `./stability` | `StabilityImageGenerator`                                                                                |
+| `./sdwebui`   | `SdWebUiImageGenerator`                                                                                  |
 | `./fal`       | `FalImageGenerator`                                                                                      |
 | `./replicate` | `ReplicateImageGenerator`                                                                                |
 | `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                           |

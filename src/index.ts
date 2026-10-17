@@ -13,3 +13,4 @@ export * from './replicate.js';
 export * from './fal.js';
 export * from './bfl.js';
 export * from './stability.js';
+export * from './sdwebui.js';
