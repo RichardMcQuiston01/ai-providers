@@ -11,6 +11,7 @@ export default defineConfig({
     claude: 'src/claude.ts',
     openai: 'src/openai.ts',
     grok: 'src/grok.ts',
+    'openai-compatible': 'src/openai-compatible.ts',
     replicate: 'src/replicate.ts',
     node: 'src/node.ts',
   },

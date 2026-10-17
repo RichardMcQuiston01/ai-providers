@@ -32,7 +32,16 @@ export interface ChatEndpoint {
   readonly defaultTextModel: string;
   /** Finishes "create one at …", for the missing-key and 401 messages. */
   readonly keyHelp: string;
+  /** Local servers often take no key; a placeholder is sent and a blank key is not an error. */
+  readonly keyOptional?: boolean;
+  /** Extra headers on every request (e.g. app attribution). Never credentials. */
+  readonly headers?: Readonly<Record<string, string>>;
+  /** When set, generateText returns this error before doing anything (e.g. a rejected host). */
+  readonly setupError?: string;
 }
+
+/** Sent when a keyless endpoint is called: the SDK insists on a non-empty key and would read the environment otherwise. */
+const PLACEHOLDER_KEY = 'no-key-required';
 
 export const OPENAI_ENDPOINT: ChatEndpoint = {
   provider: 'openai',
@@ -92,6 +101,7 @@ async function loadModule(
 
 function checkKey(apiKey: string, endpoint: ChatEndpoint): Result<string> {
   const key: string = apiKey.trim();
+  if (key === '' && endpoint.keyOptional === true) return ok(PLACEHOLDER_KEY);
   return key === ''
     ? err(
         `No ${endpoint.label} API key is set; ${endpoint.keyHelp} and pass it as apiKey.`
@@ -118,6 +128,9 @@ function createClient(
     webhookSecret: null,
     maxRetries: 1,
     timeout: timeoutMs,
+    ...(endpoint.headers !== undefined
+      ? { defaultHeaders: { ...endpoint.headers } }
+      : {}),
   });
 }
 
@@ -220,6 +233,14 @@ export class ChatCompletionsTextGenerator implements TextGenerator {
 
   async generateText(request: TextRequest): Promise<Result<TextResult>> {
     const what = `${this.#endpoint.label} (model "${this.model}")`;
+    if (this.#endpoint.setupError !== undefined) {
+      return err(this.#endpoint.setupError);
+    }
+    if (this.model === '') {
+      return err(
+        `No ${this.#endpoint.label} model is set; pass model, the name your server serves.`
+      );
+    }
     const key = checkKey(this.#apiKey, this.#endpoint);
     if (!key.ok) return key;
     if (isAborted(request.signal)) return err(`${what} was cancelled`);
