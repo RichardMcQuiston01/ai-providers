@@ -105,6 +105,19 @@ else console.error(result.error); // e.g. Ollama (model "llama3.2") failed (HTTP
 A reasoning model's `<think>…</think>` block is removed from the reply.
 Pass `images` to send pictures to a vision model.
 
+For a settings dropdown, `listOllamaModels` returns the models the host has
+pulled (`GET /api/tags`), sorted, as `ollama list` names them. It needs no
+model, so it works before one is chosen, and checks the host like the
+generator does; a generator also has `listModels()` for its own host.
+
+```ts
+const models = await listOllamaModels({
+  host: 'http://gpu-box:11434',
+  allowedHosts: parseAllowedHosts('gpu-box'),
+});
+if (models.ok) console.log(models.value); // ['llama3.2:latest', 'qwen3:8b']
+```
+
 ### Image edits with ComfyUI
 
 1. Build a workflow in ComfyUI with a **LoadImage** node and a
@@ -617,7 +630,7 @@ without a network.
 | Subpath       | What                                                                                                                    |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `.`           | everything below except `./gemini`, `./claude`, `./openai`, `./grok`, `./openai-compatible`, `./providers` and `./node` |
-| `./ollama`    | `OllamaTextGenerator`, `stripThinking`                                                                                  |
+| `./ollama`    | `OllamaTextGenerator`, `listOllamaModels`, `stripThinking`                                                              |
 | `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource`                         |
 | `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)                             |
 | `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                                                       |

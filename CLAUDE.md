@@ -8,8 +8,7 @@ Project memory for Claude Code. Read this before changing anything.
 interfaces, `TextGenerator` and `ImageGenerator` (`src/port.ts`).
 Extracted from etsy-dashboard's `src/ai/`. Consumers: etsy-dashboard
 (captions with Ollama, Gemini or Claude, photo edits with ComfyUI or
-Gemini), and later Maker Toolkit. `ROADMAP.md` has what comes next
-(`createProviders`, model listing).
+Gemini), and later Maker Toolkit. `ROADMAP.md` has what comes next.
 
 ## Layout
 
@@ -21,7 +20,7 @@ src/
   http.ts       callProvider (timeout + signal + specific errors), readJson,
                 providerMessage, toBase64/fromBase64 (no Buffer)
   hosts.ts      checkProviderHost (loopback unless allowed), parseAllowedHosts
-  ollama.ts     subpath ./ollama: OllamaTextGenerator, stripThinking
+  ollama.ts     subpath ./ollama: OllamaTextGenerator, listOllamaModels, stripThinking
   comfyui.ts    subpath ./comfyui: ComfyUiImageGenerator, WorkflowSource,
                 parseWorkflow, fillWorkflow, readHistory, memoryWorkflowSource
   gemini.ts     subpath ./gemini: GeminiTextGenerator, GeminiImageGenerator over
