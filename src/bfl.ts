@@ -1,12 +1,15 @@
 import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
+  downloadImage,
   isAborted,
-  readBytes,
+  pollClock,
+  pollPause,
   readJson,
   toBase64,
+  type PollClock,
 } from './http.js';
-import { checkImageInput, checkImageOutput } from './images.js';
+import { checkImageInput } from './images.js';
 import {
   promptWithInstructions,
   type AiImage,
@@ -128,8 +131,7 @@ export class BflImageGenerator implements ImageGenerator {
   readonly #runTimeoutMs: number;
   readonly #timeoutMs: number;
   readonly #fetch: FetchLike;
-  readonly #sleep: (ms: number) => Promise<void>;
-  readonly #now: () => number;
+  readonly #clock: PollClock;
 
   constructor(options: BflImageOptions) {
     this.#apiKey = options.apiKey;
@@ -142,10 +144,7 @@ export class BflImageGenerator implements ImageGenerator {
     this.#runTimeoutMs = options.runTimeoutMs ?? BFL_RUN_TIMEOUT_MS;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS;
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.#sleep =
-      options.sleep ??
-      ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-    this.#now = options.now ?? Date.now;
+    this.#clock = pollClock(options);
   }
 
   listModes(): Promise<Result<readonly string[]>> {
@@ -190,7 +189,7 @@ export class BflImageGenerator implements ImageGenerator {
     }
 
     // The run's clock starts before the submit request.
-    const deadline: number = this.#now() + this.#runTimeoutMs;
+    const deadline: number = this.#clock.now() + this.#runTimeoutMs;
     const pollingUrl = await this.#submit(
       {
         ...this.#input,
@@ -284,9 +283,14 @@ export class BflImageGenerator implements ImageGenerator {
           : err(`${what} finished without an output image`);
       }
       if (status !== 'Pending') return err(describeFailure(status, what));
-      await this.#sleep(POLL_INTERVAL_MS);
-      if (isAborted(signal)) return err(`${what} was cancelled`);
-      if (this.#now() >= deadline) {
+      const next = await pollPause(
+        this.#clock,
+        POLL_INTERVAL_MS,
+        deadline,
+        signal
+      );
+      if (next === 'cancelled') return err(`${what} was cancelled`);
+      if (next === 'timed out') {
         return err(
           `${what} didn't finish within ${Math.round(this.#runTimeoutMs / 1000)} s; Black Forest Labs has no cancel call, so it may still be running there.`
         );
@@ -321,21 +325,13 @@ export class BflImageGenerator implements ImageGenerator {
     const label = `Downloading ${what}'s output`;
     const checked = this.#checkOutputUrl(url, what);
     if (!checked.ok) return checked;
-    // No credentials: the delivery URL is signed.
-    const response = await callProvider(
-      this.#fetch,
-      checked.value,
-      { method: 'GET' },
-      label,
-      this.#timeoutMs,
+    // No credentials: the delivery URL is signed. A redirect is followed
+    // only to another allowed output host.
+    return downloadImage(this.#fetch, checked.value, label, {
+      maxBytes: MAX_OUTPUT_BYTES,
+      timeoutMs: this.#timeoutMs,
       signal,
-      // A redirect is followed only to another allowed output host.
-      { followRedirect: (target) => this.#checkOutputUrl(target, what) }
-    );
-    if (!response.ok) return response;
-    const bytes = await readBytes(response.value, label, MAX_OUTPUT_BYTES);
-    if (!bytes.ok) return bytes;
-    if (bytes.value.length === 0) return err(`${label}: the image is empty`);
-    return checkImageOutput(bytes.value, label);
+      followRedirect: (target) => this.#checkOutputUrl(target, what),
+    });
   }
 }
