@@ -654,6 +654,24 @@ bun run test
 bun run build      # dist/: ESM (.js), CommonJS (.cjs) and .d.ts/.d.cts
 ```
 
+### Live-API check
+
+Most providers have only been tested against a fake `fetch`. To check them
+against the real services, put the settings you have in a git-ignored
+`.env` (the names are in `scripts/live-check.env.example`) and run:
+
+```bash
+bun run live-check --list             # what would run, and what is missing
+bun run live-check --run              # one call per provider that has settings
+bun run live-check --run --only=fal,bfl,stability
+```
+
+Each provider gets one text call or one image edit (a generated test image,
+or `--image=your.png`); nothing is retried. Hosted providers cost real
+money. A provider without its settings is skipped, keys are never printed,
+and images are saved in `live-check-output/` (git-ignored). The exit code is
+1 if any check fails.
+
 Releases are published to npm by GitHub Actions when a `vX.Y.Z` tag is
 pushed on a commit that's on `main`. The repository needs the `NPM_TOKEN`
 secret. See [CLAUDE.md](./CLAUDE.md) for the branch flow.
