@@ -98,6 +98,7 @@ bun run format        # format:check in CI
 bun run test
 bun run build
 bun run changeset
+bun run live-check    # real-API check; --list first, --run costs money (scripts/live-check.ts)
 ```
 
 ## Conventions

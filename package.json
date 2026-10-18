@@ -257,6 +257,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "live-check": "bun run scripts/live-check.ts",
     "changeset": "changeset",
     "version-packages": "changeset version"
   },
