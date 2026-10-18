@@ -2,7 +2,7 @@ import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
   fromBase64,
-  readBytes,
+  readJson,
 } from './http.js';
 import { checkImageInput, checkImageOutput } from './images.js';
 import {
@@ -215,14 +215,13 @@ export class StabilityImageGenerator implements ImageGenerator {
       request.signal
     );
     if (!response.ok) return response;
-    const bytes = await readBytes(response.value, what, MAX_REPLY_BYTES);
-    if (!bytes.ok) return bytes;
-    let body: { image?: unknown; finish_reason?: unknown; seed?: unknown };
-    try {
-      body = JSON.parse(new TextDecoder().decode(bytes.value)) as typeof body;
-    } catch {
-      return err(`${what} returned something that isn't JSON`);
-    }
+    const parsed = await readJson(response.value, what, MAX_REPLY_BYTES);
+    if (!parsed.ok) return parsed;
+    const body = (parsed.value ?? {}) as {
+      image?: unknown;
+      finish_reason?: unknown;
+      seed?: unknown;
+    };
     if (
       typeof body.finish_reason === 'string' &&
       body.finish_reason !== 'SUCCESS'

@@ -3,7 +3,7 @@ import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
   fromBase64,
-  readBytes,
+  readJson,
   toBase64,
 } from './http.js';
 import { checkImageInput, checkImageOutput } from './images.js';
@@ -208,14 +208,9 @@ export class SdWebUiImageGenerator implements ImageGenerator {
       request.signal
     );
     if (!response.ok) return response;
-    const bytes = await readBytes(response.value, what, MAX_REPLY_BYTES);
-    if (!bytes.ok) return bytes;
-    let body: { images?: unknown; info?: unknown };
-    try {
-      body = JSON.parse(new TextDecoder().decode(bytes.value)) as typeof body;
-    } catch {
-      return err(`${what} returned something that isn't JSON`);
-    }
+    const parsed = await readJson(response.value, what, MAX_REPLY_BYTES);
+    if (!parsed.ok) return parsed;
+    const body = (parsed.value ?? {}) as { images?: unknown; info?: unknown };
     const encoded: unknown = Array.isArray(body.images)
       ? (body.images as unknown[])[0]
       : undefined;

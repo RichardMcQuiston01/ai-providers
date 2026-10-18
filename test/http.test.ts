@@ -3,15 +3,19 @@ import { describe, it } from 'node:test';
 
 import {
   callProvider,
+  downloadImage,
   err,
   isAborted,
   loadOptionalPackage,
+  pollClock,
+  pollPause,
   ok,
   readBytes,
   readHistory,
   readJson,
   type FetchLike,
 } from '../src/index.js';
+import { fakeFetch, PNG_OUTPUT } from './helpers.js';
 
 const errorOf = (result: { ok: boolean; error?: string }): string =>
   result.ok ? '' : (result.error ?? '');
@@ -351,5 +355,123 @@ void describe('isAborted and loadOptionalPackage', () => {
       assert.match(result.error, /bun add demo-sdk/);
       assert.match(result.error, /Cannot find module/);
     }
+  });
+});
+
+void describe('downloadImage', () => {
+  const OPTIONS = { maxBytes: 1024, timeoutMs: 1000 };
+
+  void it('downloads a PNG without credentials', async () => {
+    const { fetch, calls } = fakeFetch({
+      'GET /out.png': new Response(PNG_OUTPUT),
+    });
+    const result = await downloadImage(
+      fetch,
+      'https://files.example/out.png',
+      'Downloading x',
+      OPTIONS
+    );
+    assert.equal(result.ok && result.value.mimeType, 'image/png');
+    assert.equal(
+      new Headers(calls[0]?.init?.headers).has('authorization'),
+      false
+    );
+  });
+
+  void it('refuses empty data, non-images and oversize replies by name', async () => {
+    const cases: Array<[Response, RegExp]> = [
+      [new Response(new Uint8Array()), /Downloading x: the image is empty/],
+      [new Response('plain text'), /isn't a PNG, JPEG or WebP/],
+      [new Response(new Uint8Array(2048)), /the limit is/],
+      [new Response('gone', { status: 404 }), /HTTP 404/],
+    ];
+    for (const [response, expected] of cases) {
+      const { fetch } = fakeFetch({ 'GET /out.png': response });
+      const result = await downloadImage(
+        fetch,
+        'https://files.example/out.png',
+        'Downloading x',
+        OPTIONS
+      );
+      assert.equal(result.ok, false);
+      assert.match((result as { error: string }).error, expected);
+    }
+  });
+
+  void it('follows a redirect only where followRedirect allows', async () => {
+    const redirect = (): Response =>
+      new Response(null, {
+        status: 302,
+        headers: { location: 'https://cdn.example/out.png' },
+      });
+    const { fetch } = fakeFetch({
+      'GET /out.png': [redirect, () => new Response(PNG_OUTPUT)],
+    });
+    const refused = await downloadImage(
+      fetch,
+      'https://files.example/out.png',
+      'D',
+      OPTIONS
+    );
+    assert.equal(!refused.ok && /redirect/.test(refused.error), true);
+    const seen: string[] = [];
+    const { fetch: fetch2 } = fakeFetch({
+      'GET /out.png': [redirect, () => new Response(PNG_OUTPUT)],
+    });
+    const followed = await downloadImage(
+      fetch2,
+      'https://files.example/out.png',
+      'D',
+      {
+        ...OPTIONS,
+        followRedirect: (target) => {
+          seen.push(target);
+          return ok(target);
+        },
+      }
+    );
+    assert.equal(followed.ok, true);
+    assert.deepEqual(seen, ['https://cdn.example/out.png']);
+  });
+});
+
+void describe('pollPause', () => {
+  void it('sleeps, then says continue, cancelled or timed out', async () => {
+    const slept: number[] = [];
+    let time = 0;
+    const clock = pollClock({
+      sleep: (ms) => {
+        slept.push(ms);
+        time += ms;
+        return Promise.resolve();
+      },
+      now: () => time,
+    });
+    assert.equal(await pollPause(clock, 1000, 5000, undefined), 'continue');
+    assert.equal(await pollPause(clock, 1000, 2000, undefined), 'timed out');
+    const controller = new AbortController();
+    controller.abort();
+    assert.equal(
+      await pollPause(clock, 1000, 99999, controller.signal),
+      'cancelled'
+    );
+    assert.deepEqual(slept, [1000, 1000, 1000]);
+  });
+
+  void it('pollClock defaults to a real sleep and the system clock', async () => {
+    const clock = pollClock({});
+    const before = clock.now();
+    await clock.sleep(5);
+    assert.equal(clock.now() >= before, true);
+  });
+});
+
+void describe('readJson maxBytes', () => {
+  void it('allows a bigger reply than the default when asked', async () => {
+    const big = JSON.stringify({ image: 'a'.repeat(9 * 1024 * 1024) });
+    const small = await readJson(new Response(big), 'x');
+    assert.equal(!small.ok && /the limit is 8 MB/.test(small.error), true);
+    const raised = await readJson(new Response(big), 'x', 16 * 1024 * 1024);
+    assert.equal(raised.ok, true);
   });
 });
