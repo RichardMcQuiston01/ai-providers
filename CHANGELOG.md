@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 0.5.0
+
+### Minor Changes
+
+- bf99335: Add `BflImageGenerator` (FLUX Kontext image edits from Black Forest Labs, over plain `fetch`) on the `./bfl` subpath and the main entry. It submits a task, polls its URL until Ready and downloads the image. The API key is only sent to `bfl.ai`, output is only downloaded from `bfl.ai` subdomains (plus any `outputHosts` you list), and moderation and task errors come back as specific messages. BFL has no cancel call, so a task you stop waiting for may still run.
+- c865301: Add `createProviders`, `createTextGenerator` and `createImageGenerator` on the new `./providers` subpath. They build generators from plain settings (`{ provider: 'ollama', model: 'llama3.2' }`), so apps don't each write the same switch over providers. `TEXT_PROVIDERS` and `IMAGE_PROVIDERS` list the accepted names for a settings dropdown, and an unknown name is an error that lists the valid ones. Keys are passed in; the package still never reads the environment. The subpath is kept out of the main entry because it imports every provider.
+- f5c8703: Add `FalImageGenerator` (image edits with any fal model, over plain `fetch`) on the `./fal` subpath and the main entry. It submits to fal's queue, polls, reads the result and downloads the image; a request that is aborted or runs too long is cancelled on fal. The API key is only sent to `queue.fal.run`, and output is only downloaded from `fal.media` and `fal.run` (plus any `outputHosts` you list).
+- 9b86c97: Add `listOllamaModels` (and `OllamaTextGenerator.listModels()`): the models an Ollama host has pulled (`GET /api/tags`), sorted, for a settings dropdown. It needs no model, so it works before one is chosen, and the host goes through the same `checkProviderHost` check as the generator.
+- dabd2df: Add `./openai-compatible` with text generators for OpenRouter (`OpenRouterTextGenerator`, hosted, with optional attribution headers) and local OpenAI-protocol servers (`LmStudioTextGenerator`, `VllmTextGenerator`, `LlamaCppTextGenerator`, and `OpenAiCompatibleTextGenerator` for any other). Local hosts are checked with `checkProviderHost` (this machine unless in `allowedHosts`), need no key, and the `openai` peer is never allowed to read OpenAI environment settings. `ChatEndpoint` gains `keyOptional`, `headers` and `setupError`.
+- b09bdbb: Add `SdWebUiImageGenerator` (image edits with a local AUTOMATIC1111 or Forge web UI, over plain `fetch`) on the `./sdwebui` subpath and the main entry. It calls `POST /sdapi/v1/img2img` with modes `img2img` and `inpaint` (the second image is the mask). The host goes through `checkProviderHost`, like Ollama and ComfyUI: this machine unless you list the host. A PNG input keeps its size. The web UI's interrupt is global, so a timeout or abort stops waiting but leaves the job running.
+- 2a9d86e: Add `StabilityImageGenerator` (Stable Image edits from Stability AI, over plain `fetch`) on the `./stability` subpath and the main entry. Modes are `image-to-image` (the default, on Stable Diffusion 3.5), `structure`, `search-and-replace`, `search-and-recolor` and `remove-background`. Calls are one request and one reply, so there is no job to cancel; filtered results (`CONTENT_FILTERED`) and Stability's error messages come back as specific errors. The API key is only sent to `api.stability.ai`. `providerMessage` now also reads an `errors` list from error bodies.
+
+### Patch Changes
+
+- 9611f01: Share more of the HTTP policy the providers used to copy. `downloadImage` (GET, capped read, PNG/JPEG/WebP check) now serves ComfyUI, Replicate, fal and Black Forest Labs; `pollClock` and `pollPause` give the three polling providers one sleep, clock and cancel/deadline check; `readJson` takes a `maxBytes` cap so the Stability AI and Stable Diffusion web UI replies share it. No change in behavior.
+- 1cbd9f0: Share the policy that each provider used to copy: `isAborted`, `loadOptionalPackage` and `describeSdkError` (in `http`) and `checkImageInput` (in `images`) are now exported and used by every provider. Input-image errors now read the same everywhere ("Image 1 is image/gif; fal takes PNG, JPEG or WebP."), and the Claude provider also strips the status prefix the SDK puts on its messages.
+
 ## 0.4.0
 
 ### Minor Changes
