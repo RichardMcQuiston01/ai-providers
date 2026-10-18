@@ -1,11 +1,15 @@
 import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
-  readBytes,
+  downloadImage,
+  isAborted,
+  pollClock,
+  pollPause,
   readJson,
   toBase64,
+  type PollClock,
 } from './http.js';
-import { IMAGE_TYPES, checkImageOutput } from './images.js';
+import { checkImageInput } from './images.js';
 import {
   promptWithInstructions,
   type AiImage,
@@ -75,17 +79,9 @@ function parseModel(model: string): Result<ModelRef> {
     : ok({ path: '/predictions', body: { version } });
 }
 
-function isAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
-}
-
 function toDataUri(image: AiImage, label: string): Result<string> {
-  if (!IMAGE_TYPES.has(image.mimeType)) {
-    return err(
-      `${label} is ${image.mimeType}; Replicate models here take PNG, JPEG or WebP.`
-    );
-  }
-  if (image.data.length === 0) return err(`${label} is empty.`);
+  const checked: Result<AiImage> = checkImageInput(image, label, 'Replicate');
+  if (!checked.ok) return checked;
   return ok(`data:${image.mimeType};base64,${toBase64(image.data)}`);
 }
 
@@ -156,8 +152,7 @@ export class ReplicateImageGenerator implements ImageGenerator {
   readonly #runTimeoutMs: number;
   readonly #timeoutMs: number;
   readonly #fetch: FetchLike;
-  readonly #sleep: (ms: number) => Promise<void>;
-  readonly #now: () => number;
+  readonly #clock: PollClock;
 
   constructor(options: ReplicateImageOptions) {
     this.#apiKey = options.apiKey;
@@ -169,10 +164,7 @@ export class ReplicateImageGenerator implements ImageGenerator {
     this.#runTimeoutMs = options.runTimeoutMs ?? REPLICATE_RUN_TIMEOUT_MS;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS;
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.#sleep =
-      options.sleep ??
-      ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-    this.#now = options.now ?? Date.now;
+    this.#clock = pollClock(options);
   }
 
   listModes(): Promise<Result<readonly string[]>> {
@@ -219,7 +211,7 @@ export class ReplicateImageGenerator implements ImageGenerator {
 
     // The run's clock starts before the create request, which can itself be
     // held open for up to WAIT_SECONDS.
-    const deadline: number = this.#now() + this.#runTimeoutMs;
+    const deadline: number = this.#clock.now() + this.#runTimeoutMs;
     const created = await this.#create(
       model.value,
       {
@@ -309,12 +301,17 @@ export class ReplicateImageGenerator implements ImageGenerator {
         default:
           break; // starting or processing
       }
-      await this.#sleep(POLL_INTERVAL_MS);
-      if (isAborted(signal)) {
+      const wait = await pollPause(
+        this.#clock,
+        POLL_INTERVAL_MS,
+        deadline,
+        signal
+      );
+      if (wait === 'cancelled') {
         await this.#cancel(current.id, apiKey);
         return err(`${what} was cancelled`);
       }
-      if (this.#now() >= deadline) {
+      if (wait === 'timed out') {
         await this.#cancel(current.id, apiKey);
         return err(
           `${what} didn't finish within ${Math.round(this.#runTimeoutMs / 1000)} s and was cancelled.`
@@ -359,22 +356,13 @@ export class ReplicateImageGenerator implements ImageGenerator {
     signal: AbortSignal | undefined
   ): Promise<Result<AiImage>> {
     const label = `Downloading ${what}'s output`;
-    // No credentials: the output URL is public.
-    const response = await callProvider(
-      this.#fetch,
-      url,
-      { method: 'GET' },
-      label,
-      this.#timeoutMs,
+    // No credentials: the output URL is public. A redirect is followed
+    // only to another replicate.delivery URL.
+    return downloadImage(this.#fetch, url, label, {
+      maxBytes: MAX_OUTPUT_BYTES,
+      timeoutMs: this.#timeoutMs,
       signal,
-      // A redirect is followed only to another replicate.delivery URL.
-      { followRedirect: (target) => checkOutputUrl(target, what) }
-    );
-    if (!response.ok) return response;
-    const bytes = await readBytes(response.value, label, MAX_OUTPUT_BYTES);
-    if (!bytes.ok) return bytes;
-    const data: Uint8Array = bytes.value;
-    if (data.length === 0) return err(`${label}: the image is empty`);
-    return checkImageOutput(data, label);
+      followRedirect: (target) => checkOutputUrl(target, what),
+    });
   }
 }

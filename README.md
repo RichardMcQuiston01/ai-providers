@@ -23,6 +23,20 @@ today, a hosted API tomorrow, without changing the calling code.
 - **Grok** (`GrokTextGenerator`, `GrokImageGenerator`): text and photo
   edits with xAI's API; text uses the optional `openai` peer pointed at
   api.x.ai, images use plain `fetch`.
+- **Black Forest Labs** (`BflImageGenerator`): FLUX Kontext image edits
+  straight from the maker, over plain `fetch` (no SDK needed).
+- **Stability AI** (`StabilityImageGenerator`): Stable Image edits (image-to-image,
+  structure, search-and-replace, search-and-recolor, remove-background) over
+  plain `fetch` (no SDK needed).
+- **Stable Diffusion web UI** (`SdWebUiImageGenerator`): image edits with a
+  local AUTOMATIC1111 or Forge web UI, over plain `fetch`, with the same
+  host check as ComfyUI.
+- **fal** (`FalImageGenerator`): image edits with any fal model (FLUX and
+  more) through fal's queue, over plain `fetch` (no SDK needed).
+- **OpenAI-compatible text** (`OpenRouterTextGenerator`,
+  `LmStudioTextGenerator`, `VllmTextGenerator`, `LlamaCppTextGenerator`,
+  `OpenAiCompatibleTextGenerator`): text from OpenRouter or a local server
+  that speaks OpenAI's protocol, through the optional `openai` peer.
 - **Replicate** (`ReplicateImageGenerator`): image edits with any Replicate
   image model, over plain `fetch` (no SDK needed).
 - **OpenAI** (`OpenAiTextGenerator`, `OpenAiImageGenerator`): captions and
@@ -90,6 +104,19 @@ else console.error(result.error); // e.g. Ollama (model "llama3.2") failed (HTTP
 
 A reasoning model's `<think>…</think>` block is removed from the reply.
 Pass `images` to send pictures to a vision model.
+
+For a settings dropdown, `listOllamaModels` returns the models the host has
+pulled (`GET /api/tags`), sorted, as `ollama list` names them. It needs no
+model, so it works before one is chosen, and checks the host like the
+generator does; a generator also has `listModels()` for its own host.
+
+```ts
+const models = await listOllamaModels({
+  host: 'http://gpu-box:11434',
+  allowedHosts: parseAllowedHosts('gpu-box'),
+});
+if (models.ok) console.log(models.value); // ['llama3.2:latest', 'qwen3:8b']
+```
 
 ### Image edits with ComfyUI
 
@@ -246,6 +273,201 @@ const edited = await images.generateImage({
 - Errors give the status and Replicate's message (a failed prediction
   includes the model's own error).
 
+### Image edits with Black Forest Labs
+
+Black Forest Labs (BFL) makes FLUX. It is a hosted API with its own key
+(create one at dashboard.bfl.ai). It needs no extra package; it runs on
+`fetch`, so the main entry and the `./bfl` subpath both export it.
+
+```ts
+import { BflImageGenerator } from '@richardmcquiston01/ai-providers/bfl';
+
+const apiKey: string = env.BFL_API_KEY; // your app reads the key; the package never does
+
+// flux-kontext-pro unless you pass model (e.g. flux-kontext-max)
+const images = new BflImageGenerator({
+  apiKey,
+  input: { output_format: 'png' },
+});
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- It submits a task, polls the task's URL every second until it is `Ready`,
+  then downloads the image. BFL has no system prompt, so `instructions` lead
+  the prompt.
+- The defaults are `prompt` and `input_image`; change `promptInput` and
+  `imageInput` for other models, name one field per extra reference image in
+  `referenceImageInputs` (e.g. `['input_image_2']`), and send fixed extras
+  with `input`.
+- Moderation, errors and expired tasks come back as errors that say which.
+  BFL has no cancel call, so a task you stop waiting for (`runTimeoutMs`,
+  default 5 minutes, or an aborted `signal`) may still run and be billed.
+- The key is only sent to `bfl.ai` (the polling URL BFL returns must be
+  there, regional hosts included). Output is only downloaded from HTTPS
+  `bfl.ai` subdomains, without your key; add others with `outputHosts`.
+  Delivered files are short-lived, so download them promptly (the provider
+  already does). Output must be PNG, JPEG or WebP.
+
+### Image edits with Stability AI
+
+Stability AI's Stable Image API has its own key (create one at
+platform.stability.ai). It needs no extra package; it runs on `fetch`, so
+the main entry and the `./stability` subpath both export it.
+
+```ts
+import { StabilityImageGenerator } from '@richardmcquiston01/ai-providers/stability';
+
+const apiKey: string = env.STABILITY_API_KEY; // your app reads the key; the package never does
+
+// sd3.5-large unless you pass model; strength 0.6 unless you pass strength
+const images = new StabilityImageGenerator({ apiKey, strength: 0.5 });
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null, // image-to-image
+});
+```
+
+- `listModes()` returns `image-to-image` (the default), `structure`,
+  `search-and-replace`, `search-and-recolor` and `remove-background`.
+  `search-and-replace` needs `searchPrompt` (what to find; the prompt is
+  what replaces it) and `search-and-recolor` needs `selectPrompt`.
+- Each call is one request and one reply, so there is nothing to poll or
+  cancel; a timeout or aborted `signal` drops the connection. These calls
+  have no system prompt, so `instructions` lead the prompt. They edit one
+  image; a request with references is refused.
+- Send fixed extras (`negative_prompt`, `seed`, `style_preset`, ...) with
+  `input`. The fields the generator sets itself can't be overridden.
+- A result Stability filters (`CONTENT_FILTERED`) comes back as an error, as
+  do HTTP errors, with Stability's own message. The key is only sent to
+  `api.stability.ai`. Output must be PNG, JPEG or WebP.
+
+### Image edits with a local Stable Diffusion web UI
+
+`SdWebUiImageGenerator` talks to an AUTOMATIC1111 or Forge web UI started
+with `--api` (`POST /sdapi/v1/img2img`). It needs no extra package and no
+key; like ComfyUI it only calls this machine unless you list the host.
+
+```ts
+import { SdWebUiImageGenerator } from '@richardmcquiston01/ai-providers/sdwebui';
+
+// host defaults to http://127.0.0.1:7860; the loaded checkpoint is used unless you pass model
+const images = new SdWebUiImageGenerator({
+  denoisingStrength: 0.5,
+  input: { steps: 25, negative_prompt: 'blurry' },
+});
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null, // img2img
+});
+```
+
+- Modes are `img2img` (the default) and `inpaint`, which takes a mask as
+  the second image (white = redraw, black = keep).
+- A PNG input keeps its own size; pass `width` and `height` for other
+  inputs, or the web UI falls back to 512 x 512. The web UI has no system
+  prompt, so `instructions` lead the prompt.
+- Send `negative_prompt`, `steps`, `cfg_scale`, `sampler_name`, `seed` and
+  other fields with `input`; the fields the generator sets itself can't be
+  overridden. `model` switches the checkpoint for the call.
+- There is no job to cancel: the API's interrupt stops whatever the server
+  is running, so a timeout or aborted `signal` stops waiting and leaves the
+  web UI to finish. Raise `timeoutMs` (default 2 minutes) for slow GPUs.
+- Hosts follow `checkProviderHost`: `allowedHosts` (see `parseAllowedHosts`)
+  to reach a GPU box on your network.
+
+### Image edits with fal
+
+fal is a hosted API with its own key (create one at fal.ai/dashboard/keys).
+It needs no extra package; it runs on `fetch`, so the main entry and the
+`./fal` subpath both export it.
+
+```ts
+import { FalImageGenerator } from '@richardmcquiston01/ai-providers/fal';
+
+const apiKey: string = env.FAL_KEY; // your app reads the key; the package never does
+
+// fal-ai/flux-pro/kontext unless you pass model
+const images = new FalImageGenerator({ apiKey });
+const edited = await images.generateImage({
+  instructions: 'Keep the product unchanged.',
+  prompt: 'Place it on a bright kitchen counter.',
+  images: [{ mimeType: 'image/png', data: photoBytes }],
+  mode: null,
+});
+```
+
+- `model` is fal's endpoint id, e.g. `fal-ai/flux-pro/kontext`.
+- Models name their inputs differently. The defaults are `prompt` and
+  `image_url`; set `promptInput` and `imageInput` for other models,
+  `referenceImagesInput` to accept extra reference images (a list), and
+  `input` for fixed extras such as `{ output_format: 'png' }`.
+- It submits the request to fal's queue, polls its status every second, reads
+  the result, then downloads the first image. fal has no system prompt, so
+  `instructions` lead the prompt.
+- A request that runs past `runTimeoutMs` (default 5 minutes), or whose
+  `signal` is aborted, is cancelled on fal too. `timeoutMs` (default 120 s)
+  limits each HTTP call.
+- The key is only sent to `queue.fal.run`: the status, result and cancel URLs
+  fal returns must be on that host. Output is only downloaded from HTTPS
+  `fal.media` or `fal.run` (and their subdomains), without your key; add
+  others with `outputHosts`. Output must be PNG, JPEG or WebP.
+- Errors give the status and fal's message.
+
+### Text from OpenRouter and local OpenAI-compatible servers
+
+These use OpenAI's Chat Completions protocol through the optional `openai`
+package:
+
+```bash
+bun add @richardmcquiston01/ai-providers openai
+```
+
+```ts
+import {
+  LlamaCppTextGenerator,
+  LmStudioTextGenerator,
+  OpenRouterTextGenerator,
+  VllmTextGenerator,
+} from '@richardmcquiston01/ai-providers/openai-compatible';
+
+// Hosted: one OpenRouter key for many models (openrouter/auto unless you pass model).
+const hosted = new OpenRouterTextGenerator({
+  apiKey, // from openrouter.ai/keys; your app reads it, the package never does
+  model: 'anthropic/claude-sonnet-5-5',
+  appUrl: 'https://shop.example', // optional attribution headers
+  appName: 'My Shop',
+});
+
+// Local: a model name is required; the host defaults to the server's usual port.
+const lmStudio = new LmStudioTextGenerator({ model: 'qwen2.5-7b-instruct' }); // :1234
+const vllm = new VllmTextGenerator({ model: 'my-served-model' }); // :8000
+const llamaCpp = new LlamaCppTextGenerator({ model: 'any' }); // :8080
+```
+
+- Local servers are checked like Ollama: only this machine is accepted
+  unless the host is in `allowedHosts`, a URL with a password is refused,
+  and a bad host makes `generateText` return an error before anything is
+  sent. `apiPath` (default `/v1`) is where the API lives on the host.
+- Local servers need no key. Pass `apiKey` if you started yours with one.
+  The `openai` SDK is never allowed to read `OPENAI_API_KEY`,
+  `OPENAI_BASE_URL` or other OpenAI environment settings.
+- `OpenAiCompatibleTextGenerator` covers any other such server (Jan,
+  LocalAI, …); give it `host` and `model`, and optionally a `name`.
+- Behavior is the same as the OpenAI provider: `instructions` are the system
+  message, images (PNG, JPEG, WebP) go before the prompt, and a refusal is
+  an error. Whether a model accepts images depends on the model and server.
+- Without the `openai` package installed, it returns an error naming it. The
+  `./openai-compatible` subpath is kept out of the main entry.
+
 ### Text and images with Grok
 
 Grok is xAI's hosted API with its own key (create one at console.x.ai).
@@ -342,6 +564,31 @@ const edited = await images.generateImage({
 
 ### Choosing providers from configuration
 
+`createProviders` turns plain settings (a settings file, a form) into
+generators, so an app doesn't write the same switch. `provider` names the
+provider and the rest are that provider's own options. Keys are passed in;
+the package never reads the environment.
+
+```ts
+import { createProviders } from '@richardmcquiston01/ai-providers/providers';
+
+const built = createProviders({
+  text: { provider: 'ollama', model: 'llama3.2' },
+  image: { provider: 'stability', apiKey: settings.stabilityKey },
+});
+if (!built.ok) return console.error(built.error); // e.g. an unknown provider name
+const { text, image } = built.value; // each null when not configured
+```
+
+- `createTextGenerator` and `createImageGenerator` build one of each;
+  `TEXT_PROVIDERS` and `IMAGE_PROVIDERS` list the accepted names for a
+  dropdown. An unknown name is an error that lists the valid ones.
+- `provider: 'comfyui'` needs a `workflows` source (see above); the
+  `openai-compatible` text provider needs a `host`.
+- The `./providers` subpath imports every provider, so it is kept out of
+  the main entry. The optional peers (`openai`, `@anthropic-ai/sdk`, ...)
+  still load only when a provider that needs one is used.
+
 Use `checkProviderHost` and `parseAllowedHosts` with your own settings:
 
 ```ts
@@ -380,16 +627,21 @@ without a network.
 
 ## Exports
 
-| Subpath       | What                                                                                            |
-| ------------- | ----------------------------------------------------------------------------------------------- |
-| `.`           | everything below except `./gemini`, `./claude`, `./openai`, `./grok` and `./node`               |
-| `./ollama`    | `OllamaTextGenerator`, `stripThinking`                                                          |
-| `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource` |
-| `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)     |
-| `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                               |
-| `./replicate` | `ReplicateImageGenerator`                                                                       |
-| `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                  |
-| `./node`      | `directoryWorkflowSource` (Node/Bun only)                                                       |
+| Subpath       | What                                                                                                                    |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `.`           | everything below except `./gemini`, `./claude`, `./openai`, `./grok`, `./openai-compatible`, `./providers` and `./node` |
+| `./ollama`    | `OllamaTextGenerator`, `listOllamaModels`, `stripThinking`                                                              |
+| `./comfyui`   | `ComfyUiImageGenerator`, `parseWorkflow`, `fillWorkflow`, `readHistory`, `memoryWorkflowSource`                         |
+| `./gemini`    | `GeminiTextGenerator`, `GeminiImageGenerator` (needs `@richardmcquiston01/gemini-icon-gen`)                             |
+| `./claude`    | `ClaudeTextGenerator` (needs `@anthropic-ai/sdk`)                                                                       |
+| `./bfl`       | `BflImageGenerator`                                                                                                     |
+| `./stability` | `StabilityImageGenerator`                                                                                               |
+| `./sdwebui`   | `SdWebUiImageGenerator`                                                                                                 |
+| `./fal`       | `FalImageGenerator`                                                                                                     |
+| `./replicate` | `ReplicateImageGenerator`                                                                                               |
+| `./openai`    | `OpenAiTextGenerator`, `OpenAiImageGenerator` (needs `openai`)                                                          |
+| `./providers` | `createProviders`, `createTextGenerator`, `createImageGenerator`, `TEXT_PROVIDERS`, `IMAGE_PROVIDERS`                   |
+| `./node`      | `directoryWorkflowSource` (Node/Bun only)                                                                               |
 
 ## Development
 

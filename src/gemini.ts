@@ -1,5 +1,10 @@
-import { DEFAULT_AI_TIMEOUT_MS, fromBase64, toBase64 } from './http.js';
-import { IMAGE_TYPES, checkImageOutput } from './images.js';
+import {
+  DEFAULT_AI_TIMEOUT_MS,
+  fromBase64,
+  loadOptionalPackage,
+  toBase64,
+} from './http.js';
+import { checkImageInput, checkImageOutput } from './images.js';
 import type {
   AiImage,
   ImageGenerator,
@@ -67,18 +72,13 @@ const loadGeminiPackage: GeminiModuleLoader = () =>
  * Loads the peer package, or explains how to install it. A failed load is
  * not cached, so installing the package fixes it without a restart.
  */
-async function loadModule(
-  loader: GeminiModuleLoader
-): Promise<Result<GeminiModule>> {
-  try {
-    return ok(await loader());
-  } catch (cause: unknown) {
-    return err(
-      `The Gemini provider needs the optional package ${GEMINI_PACKAGE} (0.3.0 or later); ` +
-        `install it (e.g. bun add ${GEMINI_PACKAGE}). Loading it failed: ${describeUnknownError(cause)}`,
-      cause
-    );
-  }
+function loadModule(loader: GeminiModuleLoader): Promise<Result<GeminiModule>> {
+  return loadOptionalPackage(
+    loader,
+    'Gemini',
+    GEMINI_PACKAGE,
+    ' (0.3.0 or later)'
+  );
 }
 
 /**
@@ -128,12 +128,8 @@ function checkKey(apiKey: string): Result<string> {
 }
 
 function toInline(image: AiImage, label: string): Result<GeminiInlineImage> {
-  if (!IMAGE_TYPES.has(image.mimeType)) {
-    return err(
-      `${label} is ${image.mimeType}; Gemini takes PNG, JPEG or WebP.`
-    );
-  }
-  if (image.data.length === 0) return err(`${label} is empty.`);
+  const checked: Result<AiImage> = checkImageInput(image, label, 'Gemini');
+  if (!checked.ok) return checked;
   return ok({ data: toBase64(image.data), mimeType: image.mimeType });
 }
 

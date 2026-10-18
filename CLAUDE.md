@@ -8,20 +8,19 @@ Project memory for Claude Code. Read this before changing anything.
 interfaces, `TextGenerator` and `ImageGenerator` (`src/port.ts`).
 Extracted from etsy-dashboard's `src/ai/`. Consumers: etsy-dashboard
 (captions with Ollama, Gemini or Claude, photo edits with ComfyUI or
-Gemini), and later Maker Toolkit. `ROADMAP.md` has what comes next
-(`createProviders`, model listing).
+Gemini), and later Maker Toolkit. `ROADMAP.md` has what comes next.
 
 ## Layout
 
 ```
 src/
-  index.ts      barrel: everything except ./node, ./gemini, ./claude, ./openai and ./grok (runtime-neutral)
+  index.ts      barrel: everything except ./node, ./gemini, ./claude, ./openai, ./grok, ./openai-compatible and ./providers (runtime-neutral)
   result.ts     Result<T>, ok, err, describeUnknownError
   port.ts       AiImage, TextGenerator, ImageGenerator, requests, FetchLike
   http.ts       callProvider (timeout + signal + specific errors), readJson,
                 providerMessage, toBase64/fromBase64 (no Buffer)
   hosts.ts      checkProviderHost (loopback unless allowed), parseAllowedHosts
-  ollama.ts     subpath ./ollama: OllamaTextGenerator, stripThinking
+  ollama.ts     subpath ./ollama: OllamaTextGenerator, listOllamaModels, stripThinking
   comfyui.ts    subpath ./comfyui: ComfyUiImageGenerator, WorkflowSource,
                 parseWorkflow, fillWorkflow, readHistory, memoryWorkflowSource
   gemini.ts     subpath ./gemini: GeminiTextGenerator, GeminiImageGenerator over
@@ -30,19 +29,34 @@ src/
   claude.ts     subpath ./claude: ClaudeTextGenerator over the optional peer
                 @anthropic-ai/sdk (dynamic import(), injectable loadModule; tests run
                 the real SDK against a fake fetch)
+  openai-compatible.ts  subpath ./openai-compatible: OpenRouter and local-server (LM Studio, vLLM,
+                llama.cpp, generic) text generators built on ChatCompletionsTextGenerator; local hosts
+                go through checkProviderHost
   grok.ts       subpath ./grok: GrokTextGenerator (ChatCompletionsTextGenerator from openai.ts
                 pointed at api.x.ai), GrokImageGenerator (JSON POST /images/edits over fetch)
+  bfl.ts        subpath ./bfl: BflImageGenerator over plain fetch (submit, poll polling_url, download from
+                bfl.ai only; key only goes to bfl.ai; BFL has no cancel call)
+  stability.ts  subpath ./stability: StabilityImageGenerator over plain fetch (multipart POST to
+                api.stability.ai/v2beta, JSON reply with base64 image; modes map to endpoints)
+  sdwebui.ts    subpath ./sdwebui: SdWebUiImageGenerator over plain fetch (JSON POST /sdapi/v1/img2img to an
+                AUTOMATIC1111/Forge host through checkProviderHost; inpaint takes the second image as mask)
+  fal.ts        subpath ./fal: FalImageGenerator over plain fetch (queue submit, poll status, read result,
+                cancel on timeout/abort; key only goes to queue.fal.run, downloads from fal.media/fal.run only)
   replicate.ts  subpath ./replicate: ReplicateImageGenerator over plain fetch (create, poll,
                 cancel on timeout/abort, download from replicate.delivery only)
   openai.ts     subpath ./openai: OpenAiTextGenerator (Chat Completions), OpenAiImageGenerator
                 (images.edit) over the optional peer openai (dynamic import(), injectable
                 loadModule; tests run the real SDK against a fake fetch)
+  providers.ts  subpath ./providers: createTextGenerator, createImageGenerator, createProviders from plain
+                settings objects ({ provider: 'name', ...that provider's options }); imports every provider, so it
+                stays out of the barrel
   node.ts       subpath ./node: directoryWorkflowSource (the only node:* code)
 test/           node:test + node:assert, run by bun test; fake fetch, no network
 ```
 
 Adding a provider: `src/<provider>.ts`, export it from `src/index.ts` (unless
-it loads an optional peer, like `gemini.ts`, `claude.ts`, `openai.ts` and `grok.ts`), add
+it loads an optional peer, like `gemini.ts`, `claude.ts`, `openai.ts`, `grok.ts` and `openai-compatible.ts`), add
+its entry to `src/providers.ts` (the config unions, the name lists and the switch), add
 the entry to `tsup.config.ts`, `package.json` `exports` and `typesVersions`,
 test it against a fake `fetch`, and add a changeset. A provider whose SDK
 is heavy (Gemini, Claude, OpenAI) takes it as an **optional peer dependency**

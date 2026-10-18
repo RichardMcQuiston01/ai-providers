@@ -1,6 +1,6 @@
 import { checkProviderHost } from './hosts.js';
-import { callProvider, readBytes, readJson } from './http.js';
-import { checkImageOutput } from './images.js';
+import { callProvider, downloadImage, isAborted, readJson } from './http.js';
+
 import {
   promptWithInstructions,
   type AiImage,
@@ -506,27 +506,15 @@ export class ComfyUiImageGenerator implements ImageGenerator {
       type: output.type,
     });
     const what = `Downloading ComfyUI output ${output.filename}`;
-    const response = await callProvider(
+    return downloadImage(
       this.fetchImpl,
       `${this.host}/view?${query.toString()}`,
-      { method: 'GET' },
       what,
-      REQUEST_TIMEOUT_MS,
-      signal
+      {
+        maxBytes: MAX_COMFYUI_OUTPUT_BYTES,
+        timeoutMs: REQUEST_TIMEOUT_MS,
+        signal,
+      }
     );
-    if (!response.ok) return response;
-    const bytes = await readBytes(
-      response.value,
-      what,
-      MAX_COMFYUI_OUTPUT_BYTES
-    );
-    if (!bytes.ok) return bytes;
-    const data: Uint8Array = bytes.value;
-    if (data.length === 0) return err(`${what}: the image is empty`);
-    return checkImageOutput(data, what);
   }
-}
-
-function isAborted(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
 }

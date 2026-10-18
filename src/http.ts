@@ -1,5 +1,6 @@
 import { describeUnknownError, err, ok, type Result } from './result.js';
-import type { FetchLike } from './port.js';
+import { checkImageOutput } from './images.js';
+import type { AiImage, FetchLike } from './port.js';
 
 /** Default limit for one AI call; local GPUs and image models can be slow. */
 export const DEFAULT_AI_TIMEOUT_MS = 120_000;
@@ -197,6 +198,7 @@ export function providerMessage(body: string): string {
       error?: unknown;
       message?: unknown;
       detail?: unknown;
+      errors?: unknown;
     };
     const error: unknown = parsed.error;
     if (typeof error === 'string') return error;
@@ -207,18 +209,29 @@ export function providerMessage(body: string): string {
     if (typeof parsed.message === 'string') return parsed.message;
     // Replicate: {"title":"Unauthenticated","detail":"...","status":401}.
     if (typeof parsed.detail === 'string') return parsed.detail;
+    // Stability AI: {"name":"...","errors":["..."]}.
+    if (Array.isArray(parsed.errors)) {
+      const messages: string[] = parsed.errors.filter(
+        (entry: unknown): entry is string => typeof entry === 'string'
+      );
+      if (messages.length > 0) return messages.join('; ');
+    }
   } catch {
     // Not JSON; use the text.
   }
   return trimmed.length > 300 ? `${trimmed.slice(0, 300)}…` : trimmed;
 }
 
-/** Reads a JSON body, naming the call when it isn't JSON. */
+/**
+ * Reads a JSON body, naming the call when it isn't JSON. `maxBytes` is
+ * the cap on the reply; raise it for a reply that carries an image as base64.
+ */
 export async function readJson(
   response: Response,
-  what: string
+  what: string,
+  maxBytes: number = MAX_TEXT_BYTES
 ): Promise<Result<unknown>> {
-  const read = await readText(response, what, MAX_TEXT_BYTES);
+  const read = await readText(response, what, maxBytes);
   if (!read.ok) return read;
   const text: string = read.value;
   try {
@@ -253,4 +266,153 @@ export function fromBase64(text: string): Uint8Array | null {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes;
+}
+
+/** True once the caller's signal has fired. */
+export function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
+/**
+ * Loads an optional peer package, or explains how to install it. A failed
+ * load is not cached, so installing the package fixes it without a restart.
+ * `needs` names the provider and package ("The Claude provider needs the
+ * optional package @anthropic-ai/sdk").
+ */
+export async function loadOptionalPackage<T>(
+  loader: () => Promise<T>,
+  providerLabel: string,
+  packageName: string,
+  versionNote: string = ''
+): Promise<Result<T>> {
+  try {
+    return ok(await loader());
+  } catch (cause: unknown) {
+    return err(
+      `The ${providerLabel} provider needs the optional package ${packageName}${versionNote}; ` +
+        `install it (e.g. bun add ${packageName}). Loading it failed: ${describeUnknownError(cause)}`,
+      cause
+    );
+  }
+}
+
+type ErrorClass = abstract new (...args: never[]) => Error;
+
+/** The error classes an SDK (`openai`, `@anthropic-ai/sdk`) throws, by name. */
+export interface SdkErrorClasses {
+  readonly APIError: ErrorClass;
+  readonly AuthenticationError: ErrorClass;
+  readonly PermissionDeniedError: ErrorClass;
+  readonly NotFoundError: ErrorClass;
+  readonly RateLimitError: ErrorClass;
+}
+
+/** The SDKs prefix their messages with the status ("400 Bad ..."); the status is already in ours. */
+function messageWithoutStatus(cause: Error): string {
+  const status: unknown = (cause as { status?: unknown }).status;
+  return typeof status === 'number'
+    ? cause.message.replace(new RegExp(`^${status} `), '')
+    : cause.message;
+}
+
+/**
+ * A specific message for an SDK error: the status, the provider's message,
+ * and the likely fix. `keyHelp` finishes the sentence for a rejected key.
+ */
+export function describeSdkError(
+  classes: SdkErrorClasses,
+  what: string,
+  cause: unknown,
+  keyHelp: string
+): string {
+  if (cause instanceof classes.AuthenticationError) {
+    return `${what} was refused (401): the API key isn't valid; ${keyHelp}.`;
+  }
+  if (cause instanceof classes.PermissionDeniedError) {
+    return `${what} was refused (403): ${messageWithoutStatus(cause)}`;
+  }
+  if (cause instanceof classes.NotFoundError) {
+    return `${what} failed (404): ${messageWithoutStatus(cause)}. Check the model name.`;
+  }
+  if (cause instanceof classes.RateLimitError) {
+    return `${what} was rate limited (429): ${messageWithoutStatus(cause)}. Try again shortly.`;
+  }
+  if (cause instanceof classes.APIError) {
+    const status: unknown = (cause as { status?: unknown }).status;
+    return `${what} failed (${typeof status === 'number' ? status : 'no status'}): ${messageWithoutStatus(cause)}`;
+  }
+  return `${what} failed: ${describeUnknownError(cause)}`;
+}
+
+export interface DownloadImageOptions {
+  /** The most bytes to read before giving up. */
+  readonly maxBytes: number;
+  readonly timeoutMs: number;
+  readonly signal?: AbortSignal | undefined;
+  /** Allows redirects, each hop checked by this (see CallProviderOptions). */
+  readonly followRedirect?: ((target: string) => Result<string>) | undefined;
+}
+
+/**
+ * GETs an image a provider returned a URL for, without credentials, and
+ * checks its bytes: PNG, JPEG or WebP, and not empty. `label` names the
+ * call for messages ("Downloading fal's output").
+ */
+export async function downloadImage(
+  fetchImpl: FetchLike,
+  url: string,
+  label: string,
+  options: DownloadImageOptions
+): Promise<Result<AiImage>> {
+  const response = await callProvider(
+    fetchImpl,
+    url,
+    { method: 'GET' },
+    label,
+    options.timeoutMs,
+    options.signal,
+    options.followRedirect === undefined
+      ? {}
+      : { followRedirect: options.followRedirect }
+  );
+  if (!response.ok) return response;
+  const bytes = await readBytes(response.value, label, options.maxBytes);
+  if (!bytes.ok) return bytes;
+  if (bytes.value.length === 0) return err(`${label}: the image is empty`);
+  return checkImageOutput(bytes.value, label);
+}
+
+/** The sleep and clock the polling providers share; tests replace both. */
+export interface PollClock {
+  readonly sleep: (ms: number) => Promise<void>;
+  readonly now: () => number;
+}
+
+export function pollClock(options: {
+  readonly sleep?: ((ms: number) => Promise<void>) | undefined;
+  readonly now?: (() => number) | undefined;
+}): PollClock {
+  return {
+    sleep:
+      options.sleep ??
+      ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
+    now: options.now ?? Date.now,
+  };
+}
+
+/**
+ * The wait between polls of an async job: sleeps, then says whether to
+ * keep polling or stop because the caller cancelled or the deadline
+ * passed. The caller decides what stopping means (cancel the remote job,
+ * or only stop waiting) and words the error.
+ */
+export async function pollPause(
+  clock: PollClock,
+  intervalMs: number,
+  deadline: number,
+  signal: AbortSignal | undefined
+): Promise<'continue' | 'cancelled' | 'timed out'> {
+  await clock.sleep(intervalMs);
+  if (isAborted(signal)) return 'cancelled';
+  return clock.now() >= deadline ? 'timed out' : 'continue';
 }

@@ -1,7 +1,7 @@
 {
   "name": "@richardmcquiston01/ai-providers",
-  "version": "0.4.0",
-  "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with Ollama, ComfyUI and Replicate adapters and Gemini, Claude, OpenAI and Grok (optional peers). Functions return Results instead of throwing; the core is runtime-neutral.",
+  "version": "0.5.0",
+  "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with Ollama, ComfyUI, Replicate, fal, Black Forest Labs and Stability AI adapters, a local Stable Diffusion web UI adapter, and Gemini, Claude, OpenAI and Grok (optional peers). Functions return Results instead of throwing; the core is runtime-neutral.",
   "keywords": [
     "ai",
     "llm",
@@ -10,7 +10,15 @@
     "claude",
     "openai",
     "replicate",
+    "fal",
+    "flux",
+    "stable-diffusion",
+    "automatic1111",
     "grok",
+    "openrouter",
+    "llama-cpp",
+    "vllm",
+    "lm-studio",
     "comfyui",
     "image-generation",
     "text-generation",
@@ -58,6 +66,24 @@
       ],
       "grok": [
         "./dist/grok.d.cts"
+      ],
+      "openai-compatible": [
+        "./dist/openai-compatible.d.cts"
+      ],
+      "fal": [
+        "./dist/fal.d.cts"
+      ],
+      "bfl": [
+        "./dist/bfl.d.cts"
+      ],
+      "stability": [
+        "./dist/stability.d.cts"
+      ],
+      "sdwebui": [
+        "./dist/sdwebui.d.cts"
+      ],
+      "providers": [
+        "./dist/providers.d.cts"
       ]
     }
   },
@@ -140,6 +166,66 @@
       "require": {
         "types": "./dist/grok.d.cts",
         "default": "./dist/grok.cjs"
+      }
+    },
+    "./openai-compatible": {
+      "import": {
+        "types": "./dist/openai-compatible.d.ts",
+        "default": "./dist/openai-compatible.js"
+      },
+      "require": {
+        "types": "./dist/openai-compatible.d.cts",
+        "default": "./dist/openai-compatible.cjs"
+      }
+    },
+    "./fal": {
+      "import": {
+        "types": "./dist/fal.d.ts",
+        "default": "./dist/fal.js"
+      },
+      "require": {
+        "types": "./dist/fal.d.cts",
+        "default": "./dist/fal.cjs"
+      }
+    },
+    "./bfl": {
+      "import": {
+        "types": "./dist/bfl.d.ts",
+        "default": "./dist/bfl.js"
+      },
+      "require": {
+        "types": "./dist/bfl.d.cts",
+        "default": "./dist/bfl.cjs"
+      }
+    },
+    "./stability": {
+      "import": {
+        "types": "./dist/stability.d.ts",
+        "default": "./dist/stability.js"
+      },
+      "require": {
+        "types": "./dist/stability.d.cts",
+        "default": "./dist/stability.cjs"
+      }
+    },
+    "./sdwebui": {
+      "import": {
+        "types": "./dist/sdwebui.d.ts",
+        "default": "./dist/sdwebui.js"
+      },
+      "require": {
+        "types": "./dist/sdwebui.d.cts",
+        "default": "./dist/sdwebui.cjs"
+      }
+    },
+    "./providers": {
+      "import": {
+        "types": "./dist/providers.d.ts",
+        "default": "./dist/providers.js"
+      },
+      "require": {
+        "types": "./dist/providers.d.cts",
+        "default": "./dist/providers.cjs"
       }
     },
     "./node": {
