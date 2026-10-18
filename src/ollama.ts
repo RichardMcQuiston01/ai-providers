@@ -15,13 +15,11 @@ import { err, ok, type Result } from './result.js';
 
 export const DEFAULT_OLLAMA_HOST = 'http://127.0.0.1:11434';
 
-export interface OllamaTextOptions {
-  /** The model, as `ollama list` shows it, e.g. llama3.2. */
-  readonly model: string;
+export interface OllamaListOptions {
   /**
    * Base URL, checked with checkProviderHost: this machine unless the host
    * is in `allowedHosts`. Default 127.0.0.1:11434. A bad host makes
-   * generateText return an error.
+   * generateText and listOllamaModels return an error.
    */
   readonly host?: string;
   /** Hosts allowed besides loopback (see parseAllowedHosts). */
@@ -30,6 +28,60 @@ export interface OllamaTextOptions {
   readonly allowedHostsLabel?: string;
   readonly fetch?: FetchLike;
   readonly timeoutMs?: number;
+}
+
+export interface OllamaTextOptions extends OllamaListOptions {
+  /** The model, as `ollama list` shows it, e.g. llama3.2. */
+  readonly model: string;
+}
+
+function checkOllamaHost(options: OllamaListOptions): Result<string> {
+  return checkProviderHost(
+    'The Ollama host',
+    options.host?.trim() || DEFAULT_OLLAMA_HOST,
+    {
+      ...(options.allowedHosts !== undefined
+        ? { allowedHosts: options.allowedHosts }
+        : {}),
+      ...(options.allowedHostsLabel !== undefined
+        ? { allowedHostsLabel: options.allowedHostsLabel }
+        : {}),
+    }
+  );
+}
+
+/**
+ * The models Ollama has pulled (`GET /api/tags`), as `ollama list` names
+ * them (e.g. `llama3.2:latest`), sorted, for a settings dropdown. It needs
+ * no model, so it works before one is chosen; the host is checked like
+ * the generator's.
+ */
+export async function listOllamaModels(
+  options: OllamaListOptions = {},
+  signal?: AbortSignal
+): Promise<Result<readonly string[]>> {
+  const what = 'Ollama (listing models)';
+  const host: Result<string> = checkOllamaHost(options);
+  if (!host.ok) return host;
+  const response = await callProvider(
+    options.fetch ?? ((input, init) => fetch(input, init)),
+    `${host.value}/api/tags`,
+    { method: 'GET' },
+    what,
+    options.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS,
+    signal
+  );
+  if (!response.ok) return response;
+  const body = await readJson(response.value, what);
+  if (!body.ok) return body;
+  const models: unknown = (body.value as { models?: unknown }).models;
+  if (!Array.isArray(models)) return err(`${what} returned no model list`);
+  const names = new Set<string>();
+  for (const entry of models as unknown[]) {
+    const name: unknown = (entry as { name?: unknown } | null)?.name;
+    if (typeof name === 'string' && name.trim() !== '') names.add(name);
+  }
+  return ok([...names].sort());
 }
 
 /**
@@ -44,24 +96,20 @@ export class OllamaTextGenerator implements TextGenerator {
   private readonly hostCheck: Result<string>;
   private readonly fetchImpl: FetchLike;
   private readonly timeoutMs: number;
+  private readonly listOptions: OllamaListOptions;
 
   constructor(options: OllamaTextOptions) {
     this.model = options.model;
-    this.hostCheck = checkProviderHost(
-      'The Ollama host',
-      options.host?.trim() || DEFAULT_OLLAMA_HOST,
-      {
-        ...(options.allowedHosts !== undefined
-          ? { allowedHosts: options.allowedHosts }
-          : {}),
-        ...(options.allowedHostsLabel !== undefined
-          ? { allowedHostsLabel: options.allowedHostsLabel }
-          : {}),
-      }
-    );
+    this.hostCheck = checkOllamaHost(options);
     this.host = this.hostCheck.ok ? this.hostCheck.value : '';
     this.fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
     this.timeoutMs = options.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS;
+    this.listOptions = options;
+  }
+
+  /** The models this host has pulled; see listOllamaModels. */
+  listModels(signal?: AbortSignal): Promise<Result<readonly string[]>> {
+    return listOllamaModels(this.listOptions, signal);
   }
 
   async generateText(request: TextRequest): Promise<Result<TextResult>> {
