@@ -671,6 +671,7 @@ or `--image=your.png`); nothing is retried. Hosted providers cost real
 money. A provider without its settings is skipped, keys are never printed,
 and images are saved in `live-check-output/` (git-ignored). The exit code is
 1 if any check fails.
+[CONFIGURATION.md](./CONFIGURATION.md) explains every setting.
 
 Releases are published to npm by GitHub Actions when a `vX.Y.Z` tag is
 pushed on a commit that's on `main`. The repository needs the `NPM_TOKEN`
