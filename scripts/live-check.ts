@@ -46,6 +46,33 @@ interface RunContext {
   readonly testImage: AiImage;
   readonly outputDir: string;
   readonly signal: AbortSignal;
+  /** The most one check may take; also the limit for each request and for a polled job. */
+  readonly timeoutMs: number;
+}
+
+/** Providers that start a job and poll for it; they have a run limit besides the request limit. */
+const POLLING_PROVIDERS: ReadonlySet<string> = new Set([
+  'comfyui',
+  'replicate',
+  'fal',
+  'bfl',
+]);
+
+/**
+ * Applies `--timeout` to a provider's settings, so a slow first run (a large
+ * model loading from disk) isn't cut off by a provider's own default limit.
+ */
+function withTimeouts<T extends { provider: string }>(
+  config: T,
+  timeoutMs: number
+): T {
+  return {
+    ...config,
+    timeoutMs,
+    ...(POLLING_PROVIDERS.has(config.provider)
+      ? { runTimeoutMs: timeoutMs }
+      : {}),
+  };
 }
 
 const TEXT_INSTRUCTIONS = 'Reply with one short sentence and nothing else.';
@@ -95,7 +122,9 @@ function textCheck(
     cost,
     needs,
     run: async (context: RunContext): Promise<Result<string>> => {
-      const generator = createTextGenerator(config());
+      const generator = createTextGenerator(
+        withTimeouts(config(), context.timeoutMs)
+      );
       if (!generator.ok) return generator;
       const result = await generator.value.generateText({
         instructions: TEXT_INSTRUCTIONS,
@@ -124,7 +153,9 @@ function imageCheck(
     cost,
     needs,
     run: async (context: RunContext): Promise<Result<string>> => {
-      const generator = createImageGenerator(config());
+      const generator = createImageGenerator(
+        withTimeouts(config(), context.timeoutMs)
+      );
       if (!generator.ok) return generator;
       const request: ImageRequest = {
         instructions: IMAGE_INSTRUCTIONS,
@@ -604,6 +635,7 @@ async function main(): Promise<number> {
         testImage: testImage.value,
         outputDir: options.outputDir,
         signal: AbortSignal.timeout(options.timeoutSeconds * 1000),
+        timeoutMs: options.timeoutSeconds * 1000,
       });
     } catch (cause: unknown) {
       outcome = err(
