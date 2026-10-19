@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.5.2
+
+### Patch Changes
+
+- Rewrite the README: providers grouped as local and hosted, an install table with the optional peers, a quick start that includes `createProviders`, a providers matrix showing which have been checked against the real service, and an exports table.
+
 ## 0.5.1
 
 ### Patch Changes
