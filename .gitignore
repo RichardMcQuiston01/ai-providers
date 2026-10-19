@@ -26,6 +26,9 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# live-check outputs (images from real API calls)
+/live-check-output/
+
 # vercel
 .vercel
 
