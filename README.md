@@ -569,7 +569,7 @@ bun run live-check --run --only=fal,bfl,stability
 ```
 
 Each provider gets one text call or one image edit (a generated test image,
-or `--image=your.png`); nothing is retried. Hosted providers cost real
+or `--image=your.png`, with `--prompt="..."` to change what the edit asks for); nothing is retried. Hosted providers cost real
 money. A provider without its settings is skipped, keys are never printed,
 and images are saved in `live-check-output/` (git-ignored). The exit code is
 1 if any check fails. [CONFIGURATION.md](./CONFIGURATION.md) explains every
