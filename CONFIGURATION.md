@@ -149,11 +149,11 @@ and `prompt`); the check only exercises the defaults.
 
 These are command-line options on `bun run live-check`:
 
-| Option              | What it does                                                                              |
-| ------------------- | ----------------------------------------------------------------------------------------- |
-| `--list`            | Show which checks are ready or skipped, and what each is missing. Calls nothing.          |
-| `--run`             | Run the checks. Required to make any call.                                                |
-| `--only=a,b`        | Run only these check ids or id prefixes (`--only=stability` runs both Stability checks).  |
-| `--image=path.png`  | Use your own PNG, JPEG or WebP as the image to edit, instead of the generated test image. |
-| `--out=dir`         | Where edited images are saved. Default `live-check-output/` (git-ignored).                |
-| `--timeout=seconds` | The most one check may take before it is cancelled. Default 300.                          |
+| Option              | What it does                                                                                                                                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--list`            | Show which checks are ready or skipped, and what each is missing. Calls nothing.                                                                                                                                              |
+| `--run`             | Run the checks. Required to make any call.                                                                                                                                                                                    |
+| `--only=a,b`        | Run only these check ids or id prefixes (`--only=stability` runs both Stability checks).                                                                                                                                      |
+| `--image=path.png`  | Use your own PNG, JPEG or WebP as the image to edit, instead of the generated test image.                                                                                                                                     |
+| `--out=dir`         | Where edited images are saved. Default `live-check-output/` (git-ignored).                                                                                                                                                    |
+| `--timeout=seconds` | The most one check may take, and the limit for each request and for jobs that are polled (fal, Replicate, Black Forest Labs, ComfyUI). Default 300. Raise it for a first run with a large model, for example `--timeout=900`. |
