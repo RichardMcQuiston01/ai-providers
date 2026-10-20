@@ -112,21 +112,22 @@ const { text, image } = built.value; // each null when not configured
 
 ## Providers
 
-| Provider                   | Text | Image | Where  | Subpath               | Checked live |
-| -------------------------- | :--: | :---: | ------ | --------------------- | :----------: |
-| Ollama                     |  ✓   |       | local  | `./ollama`            |      ✓       |
-| ComfyUI                    |      |   ✓   | local  | `./comfyui`           |      ✓       |
-| Stable Diffusion web UI    |      |   ✓   | local  | `./sdwebui`           |              |
-| LM Studio, vLLM, llama.cpp |  ✓   |       | local  | `./openai-compatible` |              |
-| OpenAI                     |  ✓   |   ✓   | hosted | `./openai`            |      ✓       |
-| Gemini                     |  ✓   |   ✓   | hosted | `./gemini`            |      ✓       |
-| Grok (xAI)                 |  ✓   |   ✓   | hosted | `./grok`              |              |
-| Claude                     |  ✓   |       | hosted | `./claude`            |              |
-| OpenRouter                 |  ✓   |       | hosted | `./openai-compatible` |              |
-| Replicate                  |      |   ✓   | hosted | `./replicate`         |      ✓       |
-| fal                        |      |   ✓   | hosted | `./fal`               |              |
-| Black Forest Labs          |      |   ✓   | hosted | `./bfl`               |              |
-| Stability AI               |      |   ✓   | hosted | `./stability`         |              |
+| Provider                | Text | Image | Where  | Subpath               | Checked live |
+| ----------------------- | :--: | :---: | ------ | --------------------- | :----------: |
+| Ollama                  |  ✓   |       | local  | `./ollama`            |      ✓       |
+| ComfyUI                 |      |   ✓   | local  | `./comfyui`           |      ✓       |
+| Stable Diffusion web UI |      |   ✓   | local  | `./sdwebui`           |              |
+| llama.cpp               |  ✓   |       | local  | `./openai-compatible` |      ✓       |
+| LM Studio, vLLM         |  ✓   |       | local  | `./openai-compatible` |              |
+| OpenAI                  |  ✓   |   ✓   | hosted | `./openai`            |      ✓       |
+| Gemini                  |  ✓   |   ✓   | hosted | `./gemini`            |      ✓       |
+| Grok (xAI)              |  ✓   |   ✓   | hosted | `./grok`              |              |
+| Claude                  |  ✓   |       | hosted | `./claude`            |              |
+| OpenRouter              |  ✓   |       | hosted | `./openai-compatible` |              |
+| Replicate               |      |   ✓   | hosted | `./replicate`         |      ✓       |
+| fal                     |      |   ✓   | hosted | `./fal`               |              |
+| Black Forest Labs       |      |   ✓   | hosted | `./bfl`               |              |
+| Stability AI            |      |   ✓   | hosted | `./stability`         |              |
 
 "Checked live" means run once against the real service with the
 [live-API check](#live-api-check). The others are tested against a fake
