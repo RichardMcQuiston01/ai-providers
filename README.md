@@ -112,21 +112,22 @@ const { text, image } = built.value; // each null when not configured
 
 ## Providers
 
-| Provider                   | Text | Image | Where  | Subpath               | Checked live |
-| -------------------------- | :--: | :---: | ------ | --------------------- | :----------: |
-| Ollama                     |  ✓   |       | local  | `./ollama`            |      ✓       |
-| ComfyUI                    |      |   ✓   | local  | `./comfyui`           |      ✓       |
-| Stable Diffusion web UI    |      |   ✓   | local  | `./sdwebui`           |              |
-| LM Studio, vLLM, llama.cpp |  ✓   |       | local  | `./openai-compatible` |              |
-| OpenAI                     |  ✓   |   ✓   | hosted | `./openai`            |      ✓       |
-| Gemini                     |  ✓   |   ✓   | hosted | `./gemini`            |      ✓       |
-| Grok (xAI)                 |  ✓   |   ✓   | hosted | `./grok`              |              |
-| Claude                     |  ✓   |       | hosted | `./claude`            |              |
-| OpenRouter                 |  ✓   |       | hosted | `./openai-compatible` |              |
-| Replicate                  |      |   ✓   | hosted | `./replicate`         |      ✓       |
-| fal                        |      |   ✓   | hosted | `./fal`               |              |
-| Black Forest Labs          |      |   ✓   | hosted | `./bfl`               |              |
-| Stability AI               |      |   ✓   | hosted | `./stability`         |              |
+| Provider                | Text | Image | Where  | Subpath               | Checked live |
+| ----------------------- | :--: | :---: | ------ | --------------------- | :----------: |
+| Ollama                  |  ✓   |       | local  | `./ollama`            |      ✓       |
+| ComfyUI                 |      |   ✓   | local  | `./comfyui`           |      ✓       |
+| Stable Diffusion web UI |      |   ✓   | local  | `./sdwebui`           |              |
+| llama.cpp               |  ✓   |       | local  | `./openai-compatible` |      ✓       |
+| LM Studio, vLLM         |  ✓   |       | local  | `./openai-compatible` |              |
+| OpenAI                  |  ✓   |   ✓   | hosted | `./openai`            |      ✓       |
+| Gemini                  |  ✓   |   ✓   | hosted | `./gemini`            |      ✓       |
+| Grok (xAI)              |  ✓   |   ✓   | hosted | `./grok`              |              |
+| Claude                  |  ✓   |       | hosted | `./claude`            |              |
+| OpenRouter              |  ✓   |       | hosted | `./openai-compatible` |              |
+| Replicate               |      |   ✓   | hosted | `./replicate`         |      ✓       |
+| fal                     |      |   ✓   | hosted | `./fal`               |              |
+| Black Forest Labs       |      |   ✓   | hosted | `./bfl`               |              |
+| Stability AI            |      |   ✓   | hosted | `./stability`         |              |
 
 "Checked live" means run once against the real service with the
 [live-API check](#live-api-check). The others are tested against a fake
@@ -569,7 +570,7 @@ bun run live-check --run --only=fal,bfl,stability
 ```
 
 Each provider gets one text call or one image edit (a generated test image,
-or `--image=your.png`); nothing is retried. Hosted providers cost real
+or `--image=your.png`, with `--prompt="..."` to change what the edit asks for); nothing is retried. Hosted providers cost real
 money. A provider without its settings is skipped, keys are never printed,
 and images are saved in `live-check-output/` (git-ignored). The exit code is
 1 if any check fails. [CONFIGURATION.md](./CONFIGURATION.md) explains every
@@ -585,9 +586,7 @@ See [CLAUDE.md](./CLAUDE.md) for the branch flow.
 
 If this app, code, or repository has helped you or someone you know, please consider donating. I appreciate any help to offset the costs of development and/or AI Credits.
 
-[**Donate via Stripe**](https://donate.stripe.com/00w5kD3Gj1Xo9v7gVOcs800), or scan:
-
-[![Donate via Stripe](./donate.svg)](https://donate.stripe.com/00w5kD3Gj1Xo9v7gVOcs800)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/P1V529Z7ZP)
 
 ## License
 

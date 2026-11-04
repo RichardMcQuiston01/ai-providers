@@ -1,6 +1,6 @@
 {
   "name": "@richardmcquiston01/ai-providers",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Swappable AI providers for TypeScript: one small interface for text and image generation, with Ollama, ComfyUI, Replicate, fal, Black Forest Labs and Stability AI adapters, a local Stable Diffusion web UI adapter, and Gemini, Claude, OpenAI and Grok (optional peers). Functions return Results instead of throwing; the core is runtime-neutral.",
   "keywords": [
     "ai",
@@ -30,7 +30,7 @@
   "author": "Richard McQuiston (https://richardmcquiston.com/)",
   "funding": {
     "type": "individual",
-    "url": "https://donate.stripe.com/00w5kD3Gj1Xo9v7gVOcs800"
+    "url": "https://ko-fi.com/P1V529Z7ZP"
   },
   "homepage": "https://github.com/RichardMcQuiston01/ai-providers#readme",
   "repository": {

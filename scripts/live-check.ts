@@ -44,6 +44,8 @@ interface Check {
 
 interface RunContext {
   readonly testImage: AiImage;
+  /** What the image edit asks for; `--prompt` replaces the default. */
+  readonly imagePrompt: string;
   readonly outputDir: string;
   readonly signal: AbortSignal;
   /** The most one check may take; also the limit for each request and for a polled job. */
@@ -159,7 +161,7 @@ function imageCheck(
       if (!generator.ok) return generator;
       const request: ImageRequest = {
         instructions: IMAGE_INSTRUCTIONS,
-        prompt: IMAGE_PROMPT,
+        prompt: context.imagePrompt,
         images: [context.testImage],
         mode: mode(),
         signal: context.signal,
@@ -497,6 +499,7 @@ interface Options {
   readonly list: boolean;
   readonly only: readonly string[] | null;
   readonly imagePath: string | null;
+  readonly imagePrompt: string | null;
   readonly outputDir: string;
   readonly timeoutSeconds: number;
 }
@@ -522,6 +525,7 @@ function parseArguments(args: readonly string[]): Options {
             .map((id: string) => id.trim())
             .filter((id: string) => id !== ''),
     imagePath: valueOf('image'),
+    imagePrompt: valueOf('prompt')?.trim() ?? null,
     outputDir: valueOf('out') ?? 'live-check-output',
     timeoutSeconds: Number.isFinite(timeout) && timeout > 0 ? timeout : 300,
   };
@@ -567,7 +571,7 @@ function printUsage(): void {
       '  bun run live-check --run                  run them (paid providers cost real money)',
       '  bun run live-check --run --only=fal,bfl   only these (ids or prefixes, see --list)',
       '',
-      'Options: --image=path.png (use your own test image)  --out=dir  --timeout=seconds (default 300)',
+      'Options: --image=path.png (use your own test image)  --prompt="text" (what image edits ask for)  --out=dir  --timeout=seconds (default 300)',
       'Settings are environment variables (a git-ignored .env works); see --list for the names.',
     ].join('\n')
   );
@@ -617,8 +621,9 @@ async function main(): Promise<number> {
     (check: Check) => check.cost === 'paid'
   ).length;
   console.log(
-    `Running ${runnable.length} checks (${paid} on paid APIs, one call each)…\n`
+    `Running ${runnable.length} checks (${paid} on paid APIs, one call each)…`
   );
+  console.log(`Image edit prompt: ${options.imagePrompt ?? IMAGE_PROMPT}\n`);
 
   let failed = 0;
   let passed = 0;
@@ -633,6 +638,7 @@ async function main(): Promise<number> {
     try {
       outcome = await check.run({
         testImage: testImage.value,
+        imagePrompt: options.imagePrompt ?? IMAGE_PROMPT,
         outputDir: options.outputDir,
         signal: AbortSignal.timeout(options.timeoutSeconds * 1000),
         timeoutMs: options.timeoutSeconds * 1000,
