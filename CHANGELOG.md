@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.5.3
+
+### Patch Changes
+
+- dad246f: Add `--prompt="text"` to `bun run live-check`, to change what the image-edit checks ask for. The default prompt is unchanged, and the prompt in use is printed at the start of a run.
+- 76b7823: Switch the `funding` link in `package.json` (shown by `npm fund` and on the npm page) and the README donate link and QR code from Stripe to PayPal, because the Stripe link has been closed.
+
 ## 0.5.2
 
 ### Patch Changes
