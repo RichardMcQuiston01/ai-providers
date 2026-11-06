@@ -84,6 +84,25 @@ else console.error(edited.error);
 Every provider takes `timeoutMs` (default 120 s), a `signal` on each request,
 and an injectable `fetch` for tests.
 
+### Describe an image
+
+Image in, text out is a text request with `images`. What to ask is up to you:
+the provider only sends it.
+
+```ts
+const described = await text.generateText({
+  instructions: 'Answer in one short sentence.',
+  prompt: 'What is in this photo?',
+  images: [{ mimeType: 'image/jpeg', data: photoBytes }], // PNG, JPEG or WebP
+});
+if (described.ok) console.log(described.value.text);
+else console.error(described.error); // e.g. Image 1 is image/tiff; Ollama takes PNG, JPEG or WebP.
+```
+
+Use a model that can see (for Ollama, one such as `llava`); a text-only model
+returns the provider's error or ignores the picture. Gemini text does not take
+images yet. Images are sent as data, never as URLs.
+
 ### Choose providers from settings
 
 `createProviders` turns plain settings (a settings file, a form) into
@@ -112,22 +131,26 @@ const { text, image } = built.value; // each null when not configured
 
 ## Providers
 
-| Provider                | Text | Image | Where  | Subpath               | Checked live |
-| ----------------------- | :--: | :---: | ------ | --------------------- | :----------: |
-| Ollama                  |  ✓   |       | local  | `./ollama`            |      ✓       |
-| ComfyUI                 |      |   ✓   | local  | `./comfyui`           |      ✓       |
-| Stable Diffusion web UI |      |   ✓   | local  | `./sdwebui`           |              |
-| llama.cpp               |  ✓   |       | local  | `./openai-compatible` |      ✓       |
-| LM Studio, vLLM         |  ✓   |       | local  | `./openai-compatible` |              |
-| OpenAI                  |  ✓   |   ✓   | hosted | `./openai`            |      ✓       |
-| Gemini                  |  ✓   |   ✓   | hosted | `./gemini`            |      ✓       |
-| Grok (xAI)              |  ✓   |   ✓   | hosted | `./grok`              |              |
-| Claude                  |  ✓   |       | hosted | `./claude`            |              |
-| OpenRouter              |  ✓   |       | hosted | `./openai-compatible` |              |
-| Replicate               |      |   ✓   | hosted | `./replicate`         |      ✓       |
-| fal                     |      |   ✓   | hosted | `./fal`               |              |
-| Black Forest Labs       |      |   ✓   | hosted | `./bfl`               |              |
-| Stability AI            |      |   ✓   | hosted | `./stability`         |              |
+| Provider                | Text | Image | Vision | Where  | Subpath               | Checked live |
+| ----------------------- | :--: | :---: | :----: | ------ | --------------------- | :----------: |
+| Ollama                  |  ✓   |       |   ✓    | local  | `./ollama`            |      ✓       |
+| ComfyUI                 |      |   ✓   |        | local  | `./comfyui`           |      ✓       |
+| Stable Diffusion web UI |      |   ✓   |        | local  | `./sdwebui`           |              |
+| llama.cpp               |  ✓   |       |   ✓    | local  | `./openai-compatible` |      ✓       |
+| LM Studio, vLLM         |  ✓   |       |   ✓    | local  | `./openai-compatible` |              |
+| OpenAI                  |  ✓   |   ✓   |   ✓    | hosted | `./openai`            |      ✓       |
+| Gemini                  |  ✓   |   ✓   |        | hosted | `./gemini`            |      ✓       |
+| Grok (xAI)              |  ✓   |   ✓   |   ✓    | hosted | `./grok`              |              |
+| Claude                  |  ✓   |       |   ✓    | hosted | `./claude`            |              |
+| OpenRouter              |  ✓   |       |   ✓    | hosted | `./openai-compatible` |              |
+| Replicate               |      |   ✓   |        | hosted | `./replicate`         |      ✓       |
+| fal                     |      |   ✓   |        | hosted | `./fal`               |              |
+| Black Forest Labs       |      |   ✓   |        | hosted | `./bfl`               |              |
+| Stability AI            |      |   ✓   |        | hosted | `./stability`         |              |
+
+"Vision" means the provider accepts `images` on a text request (see
+[Describe an image](#describe-an-image)); whether it works depends on the
+model. Gemini text does not take images yet.
 
 "Checked live" means run once against the real service with the
 [live-API check](#live-api-check). The others are tested against a fake
