@@ -111,12 +111,15 @@ function excerpt(text: string): string {
   return oneLine.length > 80 ? `${oneLine.slice(0, 80)}…` : oneLine;
 }
 
-function textCheck(
+const VISION_PROMPT = 'Describe this image in one short sentence.';
+
+function textRequestCheck(
   id: string,
   label: string,
   cost: Cost,
   needs: readonly string[],
-  config: () => TextProviderConfig
+  config: () => TextProviderConfig,
+  withImage: boolean
 ): Check {
   return {
     id,
@@ -130,7 +133,8 @@ function textCheck(
       if (!generator.ok) return generator;
       const result = await generator.value.generateText({
         instructions: TEXT_INSTRUCTIONS,
-        prompt: TEXT_PROMPT,
+        prompt: withImage ? VISION_PROMPT : TEXT_PROMPT,
+        ...(withImage ? { images: [context.testImage] } : {}),
         signal: context.signal,
       });
       if (!result.ok) return result;
@@ -139,6 +143,47 @@ function textCheck(
       );
     },
   };
+}
+
+function textCheck(
+  id: string,
+  label: string,
+  cost: Cost,
+  needs: readonly string[],
+  config: () => TextProviderConfig
+): Check {
+  return textRequestCheck(id, label, cost, needs, config, false);
+}
+
+/** The same call with the test image attached; the model must be able to see. */
+function visionCheck(
+  id: string,
+  label: string,
+  cost: Cost,
+  needs: readonly string[],
+  config: () => TextProviderConfig
+): Check {
+  return textRequestCheck(id, label, cost, needs, config, true);
+}
+
+/** A text check and a vision check on the same settings. */
+function textAndVisionChecks(
+  id: string,
+  label: string,
+  cost: Cost,
+  needs: readonly string[],
+  config: () => TextProviderConfig
+): Check[] {
+  return [
+    textCheck(id, label, cost, needs, config),
+    visionCheck(
+      id.replace(/-text$/, '-vision'),
+      label.replace(/: text$/, ': vision'),
+      cost,
+      needs,
+      config
+    ),
+  ];
 }
 
 function imageCheck(
@@ -210,7 +255,20 @@ const CHECKS: readonly Check[] = [
     model: readEnv('OLLAMA_MODEL'),
     ...(readEnv('OLLAMA_HOST') === '' ? {} : localHostSettings('OLLAMA_HOST')),
   })),
-  textCheck(
+  visionCheck(
+    'ollama-vision',
+    'Ollama: vision',
+    'free',
+    ['OLLAMA_VISION_MODEL'],
+    () => ({
+      provider: 'ollama',
+      model: readEnv('OLLAMA_VISION_MODEL'),
+      ...(readEnv('OLLAMA_HOST') === ''
+        ? {}
+        : localHostSettings('OLLAMA_HOST')),
+    })
+  ),
+  ...textAndVisionChecks(
     'lmstudio-text',
     'LM Studio: text',
     'free',
@@ -221,7 +279,7 @@ const CHECKS: readonly Check[] = [
       ...localHostSettings('LMSTUDIO_HOST'),
     })
   ),
-  textCheck(
+  ...textAndVisionChecks(
     'vllm-text',
     'vLLM: text',
     'free',
@@ -232,7 +290,7 @@ const CHECKS: readonly Check[] = [
       ...localHostSettings('VLLM_HOST'),
     })
   ),
-  textCheck(
+  ...textAndVisionChecks(
     'llamacpp-text',
     'llama.cpp server: text',
     'free',
@@ -243,7 +301,7 @@ const CHECKS: readonly Check[] = [
       ...localHostSettings('LLAMACPP_HOST'),
     })
   ),
-  textCheck(
+  ...textAndVisionChecks(
     'openrouter-text',
     'OpenRouter: text',
     'paid',
@@ -259,7 +317,7 @@ const CHECKS: readonly Check[] = [
     apiKey: readEnv('GEMINI_API_KEY'),
     ...modelFrom('GEMINI_TEXT_MODEL'),
   })),
-  textCheck(
+  ...textAndVisionChecks(
     'claude-text',
     'Claude: text',
     'paid',
@@ -270,16 +328,28 @@ const CHECKS: readonly Check[] = [
       ...modelFrom('CLAUDE_TEXT_MODEL'),
     })
   ),
-  textCheck('openai-text', 'OpenAI: text', 'paid', ['OPENAI_API_KEY'], () => ({
-    provider: 'openai',
-    apiKey: readEnv('OPENAI_API_KEY'),
-    ...modelFrom('OPENAI_TEXT_MODEL'),
-  })),
-  textCheck('grok-text', 'Grok: text', 'paid', ['XAI_API_KEY'], () => ({
-    provider: 'grok',
-    apiKey: readEnv('XAI_API_KEY'),
-    ...modelFrom('GROK_TEXT_MODEL'),
-  })),
+  ...textAndVisionChecks(
+    'openai-text',
+    'OpenAI: text',
+    'paid',
+    ['OPENAI_API_KEY'],
+    () => ({
+      provider: 'openai',
+      apiKey: readEnv('OPENAI_API_KEY'),
+      ...modelFrom('OPENAI_TEXT_MODEL'),
+    })
+  ),
+  ...textAndVisionChecks(
+    'grok-text',
+    'Grok: text',
+    'paid',
+    ['XAI_API_KEY'],
+    () => ({
+      provider: 'grok',
+      apiKey: readEnv('XAI_API_KEY'),
+      ...modelFrom('GROK_TEXT_MODEL'),
+    })
+  ),
   imageCheck(
     'gemini-image',
     'Gemini: image edit',
