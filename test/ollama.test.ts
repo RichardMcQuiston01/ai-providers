@@ -113,6 +113,51 @@ void describe('OllamaTextGenerator', () => {
     assert.deepEqual(sent.messages[1]?.images, ['iVBORw==']);
   });
 
+  void it('sends several images in order', async () => {
+    const fake = fakeFetch({
+      'POST /api/chat': json({ message: { content: 'ok' } }),
+    });
+    await new OllamaTextGenerator({
+      model: 'llava',
+      fetch: fake.fetch,
+    }).generateText({
+      instructions: '',
+      prompt: 'p',
+      images: [
+        PHOTO,
+        { mimeType: 'image/jpeg', data: new Uint8Array([0xff, 0xd8, 0xff]) },
+      ],
+    });
+    const sent = JSON.parse(String(fake.calls[0]?.init?.body)) as {
+      messages: Array<{ images?: string[] }>;
+    };
+    assert.deepEqual(sent.messages[1]?.images, ['iVBORw==', '/9j/']);
+  });
+
+  void it('refuses an unsupported or empty image before sending anything', async () => {
+    const fake = fakeFetch({});
+    const generator = new OllamaTextGenerator({
+      model: 'llava',
+      fetch: fake.fetch,
+    });
+    const tiff = await generator.generateText({
+      instructions: '',
+      prompt: 'p',
+      images: [PHOTO, { mimeType: 'image/tiff', data: new Uint8Array([1]) }],
+    });
+    assert.match(
+      (tiff as { error: string }).error,
+      /Image 2 is image\/tiff; Ollama takes PNG, JPEG or WebP/
+    );
+    const empty = await generator.generateText({
+      instructions: '',
+      prompt: 'p',
+      images: [{ mimeType: 'image/png', data: new Uint8Array() }],
+    });
+    assert.match((empty as { error: string }).error, /Image 1 is empty/);
+    assert.equal(fake.calls.length, 0);
+  });
+
   void it('refuses an empty model and an empty reply', async () => {
     const empty = await new OllamaTextGenerator({ model: ' ' }).generateText({
       instructions: '',

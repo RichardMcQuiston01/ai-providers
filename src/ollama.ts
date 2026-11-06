@@ -1,4 +1,5 @@
 import { checkProviderHost } from './hosts.js';
+import { checkImageInput } from './images.js';
 import {
   DEFAULT_AI_TIMEOUT_MS,
   callProvider,
@@ -119,6 +120,10 @@ export class OllamaTextGenerator implements TextGenerator {
       return err(
         'No Ollama model is set; use one you have pulled (`ollama list`).'
       );
+    }
+    for (const [index, image] of (request.images ?? []).entries()) {
+      const checked = checkImageInput(image, `Image ${index + 1}`, 'Ollama');
+      if (!checked.ok) return checked;
     }
     const response = await callProvider(
       this.fetchImpl,
