@@ -12,7 +12,7 @@ import { fakeFetch, json } from './helpers.js';
 
 const PHOTO = {
   mimeType: 'image/png',
-  data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+  data: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
 };
 
 void describe('OllamaTextGenerator host check', () => {
@@ -110,7 +110,7 @@ void describe('OllamaTextGenerator', () => {
     const sent = JSON.parse(String(fake.calls[0]?.init?.body)) as {
       messages: Array<{ images?: string[] }>;
     };
-    assert.deepEqual(sent.messages[1]?.images, ['iVBORw==']);
+    assert.deepEqual(sent.messages[1]?.images, ['iVBORw0KGgo=']);
   });
 
   void it('sends several images in order', async () => {
@@ -125,13 +125,16 @@ void describe('OllamaTextGenerator', () => {
       prompt: 'p',
       images: [
         PHOTO,
-        { mimeType: 'image/jpeg', data: new Uint8Array([0xff, 0xd8, 0xff]) },
+        {
+          mimeType: 'image/jpeg',
+          data: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+        },
       ],
     });
     const sent = JSON.parse(String(fake.calls[0]?.init?.body)) as {
       messages: Array<{ images?: string[] }>;
     };
-    assert.deepEqual(sent.messages[1]?.images, ['iVBORw==', '/9j/']);
+    assert.deepEqual(sent.messages[1]?.images, ['iVBORw0KGgo=', '/9j/4A==']);
   });
 
   void it('refuses an unsupported or empty image before sending anything', async () => {
@@ -155,6 +158,20 @@ void describe('OllamaTextGenerator', () => {
       images: [{ mimeType: 'image/png', data: new Uint8Array() }],
     });
     assert.match((empty as { error: string }).error, /Image 1 is empty/);
+    const notAnImage = await generator.generateText({
+      instructions: '',
+      prompt: 'p',
+      images: [
+        {
+          mimeType: 'image/png',
+          data: new TextEncoder().encode('<svg onload="alert(1)">'),
+        },
+      ],
+    });
+    assert.match(
+      (notAnImage as { error: string }).error,
+      /Image 1 is labelled image\/png, but its bytes are not PNG/
+    );
     assert.equal(fake.calls.length, 0);
   });
 

@@ -10,7 +10,7 @@ import {
 import { fakeFetch, json, PNG_OUTPUT, PNG_OUTPUT_BASE64 } from './helpers.js';
 
 const KEY = 'fal-test-key-1234567890:abcdef';
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const SUBMIT = 'POST /fal-ai/flux-pro/kontext';
 const STATUS = 'GET /fal-ai/flux-pro/kontext/requests/r1/status';
 const RESULT = 'GET /fal-ai/flux-pro/kontext/requests/r1';
@@ -87,7 +87,7 @@ void describe('FalImageGenerator', () => {
     assert.deepEqual(JSON.parse(String(submit.init?.body)), {
       output_format: 'png',
       prompt: 'RULES\n\nPROMPT',
-      image_url: 'data:image/png;base64,iVBORw==',
+      image_url: 'data:image/png;base64,iVBORw0KGgo=',
     });
     assert.equal(download.url.toString(), OUTPUT_URL);
     assert.equal(
@@ -142,14 +142,17 @@ void describe('FalImageGenerator', () => {
       instructions: '',
       images: [
         { mimeType: 'image/png', data: PNG },
-        { mimeType: 'image/jpeg', data: new Uint8Array([9]) },
+        {
+          mimeType: 'image/jpeg',
+          data: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+        },
       ],
     });
     assert.equal(result.ok, true);
     assert.deepEqual(JSON.parse(String(fake.calls[0]?.init?.body)), {
       text: 'PROMPT',
-      source: 'data:image/png;base64,iVBORw==',
-      refs: ['data:image/jpeg;base64,CQ=='],
+      source: 'data:image/png;base64,iVBORw0KGgo=',
+      refs: ['data:image/jpeg;base64,/9j/4A=='],
     });
   });
 

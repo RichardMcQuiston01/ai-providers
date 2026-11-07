@@ -98,8 +98,83 @@ void describe('checkImageInput', () => {
 
   void it('accepts the extra types a provider passes in', () => {
     const allowed = new Set([...IMAGE_TYPES, 'image/gif']);
-    const gif = { mimeType: 'image/gif', data: new Uint8Array(PNG) };
+    const gif = {
+      mimeType: 'image/gif',
+      data: new TextEncoder().encode('GIF89a'),
+    };
     assert.equal(checkImageInput(gif, 'Image 1', 'Test', allowed).ok, true);
+  });
+
+  void it('refuses bytes that are not an image, whatever the label says', () => {
+    const result = checkImageInput(
+      {
+        mimeType: 'image/png',
+        data: new TextEncoder().encode('<svg onload="alert(1)">'),
+      },
+      'Image 1',
+      'Test'
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(
+        result.error,
+        'Image 1 is labelled image/png, but its bytes are not PNG or any image type this package reads.'
+      );
+    }
+  });
+
+  void it('refuses a label that names the wrong format', () => {
+    const result = checkImageInput(
+      { mimeType: 'image/jpeg', data: new Uint8Array(PNG) },
+      'Image 1',
+      'Test'
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(
+        result.error,
+        'Image 1 is labelled image/jpeg, but its bytes are PNG. Fix the label.'
+      );
+    }
+  });
+
+  void it('checks every accepted type against its own signature', () => {
+    const jpeg = {
+      mimeType: 'image/jpeg',
+      data: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+    };
+    const webp = {
+      mimeType: 'image/webp',
+      data: new Uint8Array([...ascii('RIFF'), 0, 0, 0, 0, ...ascii('WEBP')]),
+    };
+    assert.equal(checkImageInput(jpeg, 'Image 1', 'Test').ok, true);
+    assert.equal(checkImageInput(webp, 'Image 1', 'Test').ok, true);
+  });
+
+  void it('refuses a GIF unless the provider allows it, even with a GIF label', () => {
+    const gifBytes = new TextEncoder().encode('GIF89a');
+    const allowed = new Set([...IMAGE_TYPES, 'image/gif']);
+    assert.equal(
+      checkImageInput(
+        { mimeType: 'image/png', data: gifBytes },
+        'Image 1',
+        'Test',
+        allowed
+      ).ok,
+      false
+    );
+    const refused = checkImageInput(
+      { mimeType: 'image/png', data: gifBytes },
+      'Image 1',
+      'Test'
+    );
+    assert.equal(refused.ok, false);
+    if (!refused.ok) {
+      assert.match(
+        refused.error,
+        /they look like GIF, which Test does not take/
+      );
+    }
   });
 
   void it('refuses an empty image', () => {

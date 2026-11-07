@@ -10,7 +10,7 @@ import {
 import { fakeFetch, json, PNG_OUTPUT } from './helpers.js';
 
 const KEY = 'r8_test-key-1234567890';
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const CREATE = 'POST /v1/models/black-forest-labs/flux-kontext-pro/predictions';
 const OUTPUT_URL = 'https://replicate.delivery/xezq/abc/out.png';
 
@@ -70,7 +70,7 @@ void describe('ReplicateImageGenerator', () => {
       input: {
         output_format: 'png',
         prompt: 'RULES\n\nPROMPT',
-        input_image: 'data:image/png;base64,iVBORw==',
+        input_image: 'data:image/png;base64,iVBORw0KGgo=',
       },
     });
     assert.equal(download.url.toString(), OUTPUT_URL);
@@ -119,15 +119,18 @@ void describe('ReplicateImageGenerator', () => {
       instructions: '',
       images: [
         { mimeType: 'image/png', data: PNG },
-        { mimeType: 'image/jpeg', data: new Uint8Array([9]) },
+        {
+          mimeType: 'image/jpeg',
+          data: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+        },
       ],
     });
     assert.deepEqual(JSON.parse(String(fake.calls[0]?.init?.body)), {
       version: 'abc123',
       input: {
         text: 'PROMPT',
-        image: 'data:image/png;base64,iVBORw==',
-        refs: ['data:image/jpeg;base64,CQ=='],
+        image: 'data:image/png;base64,iVBORw0KGgo=',
+        refs: ['data:image/jpeg;base64,/9j/4A=='],
       },
     });
   });

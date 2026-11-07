@@ -65,8 +65,28 @@ const IMAGE_TYPE_NAMES: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * Like `sniffImageType`, but also recognises GIF, for the providers that
+ * take it as input (Claude). Outputs are still only PNG, JPEG or WebP.
+ */
+function sniffInputImageType(data: Uint8Array): string | null {
+  const known: string | null = sniffImageType(data);
+  if (known !== null) return known;
+  if (hasAscii(data, 0, 'GIF87a') || hasAscii(data, 0, 'GIF89a')) {
+    return 'image/gif';
+  }
+  return null;
+}
+
+function typeName(mimeType: string): string {
+  return IMAGE_TYPE_NAMES.get(mimeType) ?? mimeType;
+}
+
+/**
  * An image a caller passed in: PNG, JPEG or WebP (or `allowed`, for a
- * provider that takes more), and not empty. `label` names the image
+ * provider that takes more), and not empty. The declared `mimeType` is
+ * never trusted on its own: it must also match the file's first bytes, so
+ * a mislabelled file, or bytes that are not an image at all, are refused
+ * instead of being sent on under the wrong type. `label` names the image
  * ("Image 2") and `providerLabel` the provider, for the message.
  */
 export function checkImageInput(
@@ -76,9 +96,7 @@ export function checkImageInput(
   allowed: ReadonlySet<string> = IMAGE_TYPES
 ): Result<AiImage> {
   if (!allowed.has(image.mimeType)) {
-    const names: string[] = [...allowed].map(
-      (type: string) => IMAGE_TYPE_NAMES.get(type) ?? type
-    );
+    const names: string[] = [...allowed].map(typeName);
     const list: string =
       names.length > 1
         ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`
@@ -88,5 +106,17 @@ export function checkImageInput(
     );
   }
   if (image.data.length === 0) return err(`${label} is empty.`);
+  const actual: string | null = sniffInputImageType(image.data);
+  if (actual === null || !allowed.has(actual)) {
+    return err(
+      `${label} is labelled ${image.mimeType}, but its bytes are not ${typeName(image.mimeType)}` +
+        `${actual === null ? ' or any image type this package reads' : ` (they look like ${typeName(actual)}, which ${providerLabel} does not take)`}.`
+    );
+  }
+  if (actual !== image.mimeType) {
+    return err(
+      `${label} is labelled ${image.mimeType}, but its bytes are ${typeName(actual)}. Fix the label.`
+    );
+  }
   return ok(image);
 }
