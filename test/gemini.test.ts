@@ -12,7 +12,10 @@ import {
 import { ok } from '../src/index.js';
 import { PNG_OUTPUT, PNG_OUTPUT_BASE64 } from './helpers.js';
 
-const PHOTO = { mimeType: 'image/jpeg', data: new Uint8Array([1, 2, 3]) };
+const PHOTO = {
+  mimeType: 'image/jpeg',
+  data: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+};
 const EDITED_BASE64 = PNG_OUTPUT_BASE64;
 
 type TextCall = Parameters<GeminiModule['generateText']>[0];
@@ -210,7 +213,12 @@ void describe('GeminiImageGenerator', () => {
       apiKey: 'k',
       loadModule: fake.load,
     });
-    const reference = { mimeType: 'image/webp', data: new Uint8Array([9]) };
+    const reference = {
+      mimeType: 'image/webp',
+      data: new Uint8Array([
+        0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
+      ]),
+    };
     const result = await generator.generateImage({
       instructions: 'Keep the product as it is.',
       prompt: 'Wooden table',
@@ -229,10 +237,10 @@ void describe('GeminiImageGenerator', () => {
     );
     assert.deepEqual(fake.editCalls, [
       {
-        image: { data: 'AQID', mimeType: 'image/jpeg' },
+        image: { data: '/9j/4A==', mimeType: 'image/jpeg' },
         prompt: 'Wooden table',
         instructions: 'Keep the product as it is.',
-        referenceImages: [{ data: 'CQ==', mimeType: 'image/webp' }],
+        referenceImages: [{ data: 'UklGRgAAAABXRUJQ', mimeType: 'image/webp' }],
         model: DEFAULT_GEMINI_IMAGE_MODEL,
         apiKey: 'k',
       },

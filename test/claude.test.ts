@@ -114,7 +114,14 @@ void describe('ClaudeTextGenerator', () => {
     }).generateText({
       instructions: '',
       prompt: 'P',
-      images: [{ mimeType: 'image/png', data: new Uint8Array([1, 2, 3]) }],
+      images: [
+        {
+          mimeType: 'image/png',
+          data: new Uint8Array([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+          ]),
+        },
+      ],
     });
     await new ClaudeTextGenerator({
       apiKey: KEY,
@@ -130,7 +137,11 @@ void describe('ClaudeTextGenerator', () => {
         content: [
           {
             type: 'image',
-            source: { type: 'base64', media_type: 'image/png', data: 'AQID' },
+            source: {
+              type: 'base64',
+              media_type: 'image/png',
+              data: 'iVBORw0KGgo=',
+            },
           },
           { type: 'text', text: 'P' },
         ],

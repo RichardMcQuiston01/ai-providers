@@ -14,7 +14,7 @@ import {
 import { PNG_OUTPUT, PNG_OUTPUT_BASE64 } from './helpers.js';
 
 const KEY = 'sk-proj-test-key-1234567890';
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 interface Seen {
   url: string;
@@ -105,7 +105,14 @@ void describe('OpenAiTextGenerator', () => {
     const result = await generator.generateText({
       instructions: 'RULES',
       prompt: 'PROMPT',
-      images: [{ mimeType: 'image/png', data: new Uint8Array([1, 2, 3]) }],
+      images: [
+        {
+          mimeType: 'image/png',
+          data: new Uint8Array([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+          ]),
+        },
+      ],
     });
     assert.deepEqual(result, { ok: true, value: { text: 'A fresh caption' } });
     const request = fake.seen[0];
@@ -122,7 +129,7 @@ void describe('OpenAiTextGenerator', () => {
           content: [
             {
               type: 'image_url',
-              image_url: { url: 'data:image/png;base64,AQID' },
+              image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' },
             },
             { type: 'text', text: 'PROMPT' },
           ],
@@ -284,7 +291,10 @@ void describe('OpenAiImageGenerator', () => {
       prompt: 'PROMPT',
       images: [
         { mimeType: 'image/png', data: PNG },
-        { mimeType: 'image/jpeg', data: new Uint8Array([9]) },
+        {
+          mimeType: 'image/jpeg',
+          data: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+        },
       ],
       mode: null,
     });
@@ -305,8 +315,8 @@ void describe('OpenAiImageGenerator', () => {
     assert.deepEqual(
       request.files.map((file) => [file.name, file.type, file.size]),
       [
-        ['image-1.png', 'image/png', 4],
-        ['image-2.jpg', 'image/jpeg', 1],
+        ['image-1.png', 'image/png', 8],
+        ['image-2.jpg', 'image/jpeg', 4],
       ]
     );
   });
@@ -319,7 +329,7 @@ void describe('OpenAiImageGenerator', () => {
     }).generateImage({
       instructions: '',
       prompt: 'PROMPT',
-      images: [{ mimeType: 'image/webp', data: PNG }],
+      images: [{ mimeType: 'image/png', data: PNG }],
       mode: 'gpt-image-2',
     });
     assert.equal(result.ok && result.value.image.mimeType, 'image/png');
