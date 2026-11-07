@@ -10,7 +10,7 @@ import {
 import { fakeFetch, json, PNG_OUTPUT } from './helpers.js';
 
 const KEY = 'bfl-test-key-1234567890';
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const SUBMIT = 'POST /v1/flux-kontext-pro';
 const POLL = 'GET /v1/get_result';
 const OUTPUT_URL = 'https://delivery-eu1.bfl.ai/results/abc/sample.png';
@@ -73,7 +73,7 @@ void describe('BflImageGenerator', () => {
     assert.deepEqual(JSON.parse(String(submit.init?.body)), {
       output_format: 'png',
       prompt: 'RULES\n\nPROMPT',
-      input_image: 'iVBORw==',
+      input_image: 'iVBORw0KGgo=',
     });
     assert.equal(download.url.toString(), OUTPUT_URL);
     assert.equal(new Headers(download.init?.headers).get('x-key'), null);
@@ -115,14 +115,17 @@ void describe('BflImageGenerator', () => {
       instructions: '',
       images: [
         { mimeType: 'image/png', data: PNG },
-        { mimeType: 'image/jpeg', data: new Uint8Array([9]) },
+        {
+          mimeType: 'image/jpeg',
+          data: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]),
+        },
       ],
     });
     assert.equal(result.ok, true);
     assert.deepEqual(JSON.parse(String(fake.calls[0]?.init?.body)), {
       text: 'PROMPT',
-      source: 'iVBORw==',
-      input_image_2: 'CQ==',
+      source: 'iVBORw0KGgo=',
+      input_image_2: '/9j/4A==',
     });
   });
 

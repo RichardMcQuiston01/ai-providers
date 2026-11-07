@@ -30,21 +30,42 @@ machine on your network, the script allows exactly the host you name; set it
 as a full address with `http://` or `https://`, a port if needed, and no
 path, username or password.
 
-| Variable            | Required for | What it is                                                                                                                                                                     |
-| ------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OLLAMA_MODEL`      | Ollama       | The model to chat with, as `ollama list` shows it, for example `llama3.2`. Also the switch that turns the Ollama checks on. The list check confirms it is pulled.              |
-| `OLLAMA_HOST`       | optional     | Where Ollama runs. Default `http://127.0.0.1:11434`.                                                                                                                           |
-| `LMSTUDIO_HOST`     | LM Studio    | Address of LM Studio's local server, usually `http://127.0.0.1:1234`.                                                                                                          |
-| `LMSTUDIO_MODEL`    | LM Studio    | The model name the server reports (shown in LM Studio's server tab).                                                                                                           |
-| `VLLM_HOST`         | vLLM         | Address of the vLLM server, usually `http://127.0.0.1:8000`.                                                                                                                   |
-| `VLLM_MODEL`        | vLLM         | The model name vLLM serves (its `--served-model-name`, or the model id).                                                                                                       |
-| `LLAMACPP_HOST`     | llama.cpp    | Address of `llama-server`, usually `http://127.0.0.1:8080`.                                                                                                                    |
-| `LLAMACPP_MODEL`    | llama.cpp    | The model name sent with the request. `llama-server` serves the one model it loaded, so use that model's name.                                                                 |
-| `SDWEBUI_HOST`      | Web UI       | Address of an AUTOMATIC1111 or Forge web UI started with `--api`, usually `http://127.0.0.1:7860`. Also the switch that turns the check on.                                    |
-| `SDWEBUI_MODEL`     | optional     | A checkpoint to switch to for the call, as the web UI lists it (for example `sd_xl_base_1.0.safetensors`). Left blank, the loaded checkpoint is used.                          |
-| `COMFYUI_WORKFLOWS` | ComfyUI      | The folder holding your ComfyUI workflows, in **API format**, with placeholders added. See [Setting up ComfyUI](#setting-up-comfyui). Also the switch that turns the check on. |
-| `COMFYUI_MODE`      | optional     | Which workflow to run: the file name without `.json` (`edit-sky` for `edit-sky.json`). Left blank, the first workflow in the folder, sorted by name, is used.                  |
-| `COMFYUI_HOST`      | optional     | Where ComfyUI runs. Default `http://127.0.0.1:8188`.                                                                                                                           |
+| Variable              | Required for  | What it is                                                                                                                                                                     |
+| --------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OLLAMA_MODEL`        | Ollama        | The model to chat with, as `ollama list` shows it, for example `llama3.2`. Also the switch that turns the Ollama checks on. The list check confirms it is pulled.              |
+| `OLLAMA_VISION_MODEL` | Ollama vision | A model that can see (for example `llava` or `qwen2.5vl`), for the vision check. Separate from `OLLAMA_MODEL` because the chat model is often text-only.                       |
+| `OLLAMA_HOST`         | optional      | Where Ollama runs. Default `http://127.0.0.1:11434`.                                                                                                                           |
+| `LMSTUDIO_HOST`       | LM Studio     | Address of LM Studio's local server, usually `http://127.0.0.1:1234`.                                                                                                          |
+| `LMSTUDIO_MODEL`      | LM Studio     | The model name the server reports (shown in LM Studio's server tab).                                                                                                           |
+| `VLLM_HOST`           | vLLM          | Address of the vLLM server, usually `http://127.0.0.1:8000`.                                                                                                                   |
+| `VLLM_MODEL`          | vLLM          | The model name vLLM serves (its `--served-model-name`, or the model id).                                                                                                       |
+| `LLAMACPP_HOST`       | llama.cpp     | Address of `llama-server`, usually `http://127.0.0.1:8080`.                                                                                                                    |
+| `LLAMACPP_MODEL`      | llama.cpp     | The model name sent with the request. `llama-server` serves the one model it loaded, so use that model's name.                                                                 |
+| `SDWEBUI_HOST`        | Web UI        | Address of an AUTOMATIC1111 or Forge web UI started with `--api`, usually `http://127.0.0.1:7860`. Also the switch that turns the check on.                                    |
+| `SDWEBUI_MODEL`       | optional      | A checkpoint to switch to for the call, as the web UI lists it (for example `sd_xl_base_1.0.safetensors`). Left blank, the loaded checkpoint is used.                          |
+| `COMFYUI_WORKFLOWS`   | ComfyUI       | The folder holding your ComfyUI workflows, in **API format**, with placeholders added. See [Setting up ComfyUI](#setting-up-comfyui). Also the switch that turns the check on. |
+| `COMFYUI_MODE`        | optional      | Which workflow to run: the file name without `.json` (`edit-sky` for `edit-sky.json`). Left blank, the first workflow in the folder, sorted by name, is used.                  |
+| `COMFYUI_HOST`        | optional      | Where ComfyUI runs. Default `http://127.0.0.1:8188`.                                                                                                                           |
+
+## Vision checks
+
+A vision check sends the test image (or `--image`) with the prompt "Describe
+this image in one short sentence." and prints the reply. It uses the same
+settings as that provider's text check, except Ollama, which has its own
+`OLLAMA_VISION_MODEL`. Run one with `--only=llamacpp-vision` (or
+`ollama-vision`, `lmstudio-vision`, `vllm-vision`, `claude-vision`,
+`openai-vision`, `grok-vision`, `openrouter-vision`).
+
+- The model has to be able to see. A text-only model returns the provider's
+  error, or ignores the picture.
+- **llama.cpp:** start `llama-server` with a vision model and its projector
+  (the model's `mmproj` file), or with a `-hf` download that includes it.
+  The same server and `LLAMACPP_MODEL` then serve both the text and vision
+  checks.
+- **OpenRouter:** the default `openrouter/auto` may pick a model that can't
+  see, so set `OPENROUTER_MODEL` to a vision model for this check.
+- Gemini text doesn't take images yet, so it has no vision check.
+- Each hosted vision check is one more paid call.
 
 ## Setting up ComfyUI
 
@@ -111,10 +132,10 @@ Each key switches on that provider's checks.
 | Variable              | Provider          | Checks it runs                    | Where to get it                               |
 | --------------------- | ----------------- | --------------------------------- | --------------------------------------------- |
 | `GEMINI_API_KEY`      | Google Gemini     | text, image edit                  | Google AI Studio                              |
-| `ANTHROPIC_API_KEY`   | Anthropic Claude  | text                              | Claude Console                                |
-| `OPENAI_API_KEY`      | OpenAI            | text, image edit                  | platform.openai.com                           |
-| `XAI_API_KEY`         | xAI Grok          | text, image edit                  | console.x.ai                                  |
-| `OPENROUTER_API_KEY`  | OpenRouter        | text                              | openrouter.ai/keys                            |
+| `ANTHROPIC_API_KEY`   | Anthropic Claude  | text, vision                      | Claude Console                                |
+| `OPENAI_API_KEY`      | OpenAI            | text, vision, image edit          | platform.openai.com                           |
+| `XAI_API_KEY`         | xAI Grok          | text, vision, image edit          | console.x.ai                                  |
+| `OPENROUTER_API_KEY`  | OpenRouter        | text, vision                      | openrouter.ai/keys                            |
 | `REPLICATE_API_TOKEN` | Replicate         | image edit                        | the API tokens page of your Replicate account |
 | `FAL_KEY`             | fal               | image edit                        | fal.ai/dashboard/keys                         |
 | `BFL_API_KEY`         | Black Forest Labs | image edit                        | dashboard.bfl.ai                              |

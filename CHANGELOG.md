@@ -1,11 +1,19 @@
 # CHANGELOG
 
+## 0.5.4
+
+### Patch Changes
+
+- e40f1a9: `checkImageInput` now checks an input image's bytes as well as its declared type. Before, a file labelled `image/png` was accepted whatever it contained, so mislabelled files and non-images (an SVG, text, a truncated download) were sent to the provider under the wrong type. Now the first bytes must match the label (PNG, JPEG or WebP; GIF where a provider allows it), and the error says what the bytes look like. Callers with real images are unaffected; callers that guessed the type from a file extension may now see an error naming the correct label.
+- f5cb9fa: `OllamaTextGenerator` now checks images like the other text providers: PNG, JPEG or WebP and not empty, with a specific error naming the image, before anything is sent. The README gains a "Describe an image" example and a Vision column in the providers table.
+- b218bec: The live check gains vision checks (`ollama-vision`, `lmstudio-vision`, `vllm-vision`, `llamacpp-vision`, `claude-vision`, `openai-vision`, `grok-vision`, `openrouter-vision`) that send the test image and print the model's description. Ollama's has its own `OLLAMA_VISION_MODEL`; the others use the provider's existing settings.
+
 ## 0.5.3
 
 ### Patch Changes
 
 - dad246f: Add `--prompt="text"` to `bun run live-check`, to change what the image-edit checks ask for. The default prompt is unchanged, and the prompt in use is printed at the start of a run.
-- 76b7823: Switch the `funding` link in `package.json` (shown by `npm fund` and on the npm page) and the README donate link and QR code from Stripe to PayPal, because the Stripe link has been closed.
+- Switch the `funding` link in `package.json` (shown by `npm fund` and on the npm page) and the README donate link from Stripe to Ko-fi, because the Stripe link has been closed. The README now uses the Ko-fi button instead of a QR code, and a `.github/FUNDING.yml` adds the Sponsor button on GitHub.
 
 ## 0.5.2
 
