@@ -315,6 +315,24 @@ function messageWithoutStatus(cause: Error): string {
     : cause.message;
 }
 
+/** The origin a redirecting SDK error points to, or null. Never the full URL, which may carry credentials. */
+function redirectOrigin(cause: Error): string | null {
+  const headers: unknown = (cause as { headers?: unknown }).headers;
+  const location: string | null | undefined =
+    headers instanceof Headers ? headers.get('location') : null;
+  if (location === null || location === undefined) return null;
+  try {
+    return new URL(location).origin;
+  } catch {
+    return null;
+  }
+}
+
+function redirectMessage(what: string, status: number, cause: Error): string {
+  const origin: string | null = redirectOrigin(cause);
+  return `${what} answered with a redirect (HTTP ${status})${origin === null ? '' : ` to ${origin}`}; redirects aren't followed, so check the address.`;
+}
+
 /**
  * A specific message for an SDK error: the status, the provider's message,
  * and the likely fix. `keyHelp` finishes the sentence for a rejected key.
@@ -339,6 +357,9 @@ export function describeSdkError(
   }
   if (cause instanceof classes.APIError) {
     const status: unknown = (cause as { status?: unknown }).status;
+    if (typeof status === 'number' && status >= 300 && status < 400) {
+      return redirectMessage(what, status, cause);
+    }
     return `${what} failed (${typeof status === 'number' ? status : 'no status'}): ${messageWithoutStatus(cause)}`;
   }
   return `${what} failed: ${describeUnknownError(cause)}`;

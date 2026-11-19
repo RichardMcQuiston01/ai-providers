@@ -494,3 +494,85 @@ void describe('OpenAiImageGenerator output types', () => {
     assert.match(result.error ?? '', /isn't a PNG, JPEG or WebP image/);
   });
 });
+
+void describe('redirects and inherited headers', () => {
+  void it('refuses to follow a redirect and names where it pointed', async () => {
+    const { load, seen } = sdkWith(
+      () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://elsewhere.example/v1?token=secret' },
+        })
+    );
+    const generator = new OpenAiTextGenerator({
+      apiKey: KEY,
+      loadModule: load,
+    });
+    const result = await generator.generateText({
+      prompt: 'hi',
+      instructions: '',
+      images: [],
+    });
+    assert.equal(result.ok, false);
+    const message: string = result.ok ? '' : result.error;
+    assert.match(
+      message,
+      /redirect \(HTTP 302\) to https:\/\/elsewhere\.example;/
+    );
+    assert.match(message, /redirects aren't followed/);
+    assert.doesNotMatch(message, /secret/);
+    assert.equal(seen.length, 1);
+  });
+
+  void it('asks fetch not to follow redirects', async () => {
+    let redirectMode: RequestRedirect | undefined;
+    const real = realSdk.default;
+    class Spy extends real {
+      constructor(options: ConstructorParameters<typeof real>[0]) {
+        super({
+          ...options,
+          fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
+            redirectMode = init?.redirect;
+            return completion();
+          },
+        });
+      }
+    }
+    const module = { ...realSdk, default: Spy } as unknown as OpenAiModule;
+    const generator = new OpenAiTextGenerator({
+      apiKey: KEY,
+      loadModule: async () => module,
+    });
+    const result = await generator.generateText({
+      prompt: 'hi',
+      instructions: '',
+      images: [],
+    });
+    assert.equal(result.ok, true);
+    assert.equal(redirectMode, 'manual');
+  });
+
+  void it('keeps its own key when OPENAI_CUSTOM_HEADERS names another', async () => {
+    const previous: string | undefined = process.env.OPENAI_CUSTOM_HEADERS;
+    process.env.OPENAI_CUSTOM_HEADERS =
+      'Authorization: Bearer other-integration\nX-Team: blue';
+    try {
+      const { load, seen } = sdkWith(() => completion());
+      const generator = new OpenAiTextGenerator({
+        apiKey: KEY,
+        loadModule: load,
+      });
+      const result = await generator.generateText({
+        prompt: 'hi',
+        instructions: '',
+        images: [],
+      });
+      assert.equal(result.ok, true);
+      assert.equal(seen[0]?.headers.get('authorization'), `Bearer ${KEY}`);
+      assert.equal(seen[0]?.headers.get('x-team'), 'blue');
+    } finally {
+      if (previous === undefined) delete process.env.OPENAI_CUSTOM_HEADERS;
+      else process.env.OPENAI_CUSTOM_HEADERS = previous;
+    }
+  });
+});
