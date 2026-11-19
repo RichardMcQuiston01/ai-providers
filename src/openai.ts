@@ -112,6 +112,12 @@ function checkKey(apiKey: string, endpoint: ChatEndpoint): Result<string> {
  * A client that gets its credentials and endpoint only from the options:
  * the explicit nulls and base URL stop the SDK reading OPENAI_ORG_ID,
  * OPENAI_PROJECT_ID, OPENAI_WEBHOOK_SECRET and OPENAI_BASE_URL.
+ *
+ * Redirects are not followed (`redirect: 'manual'`): one would carry the
+ * prompt and images to wherever `Location` points, past the host check.
+ * The SDK also merges OPENAI_CUSTOM_HEADERS from the environment over its
+ * own Authorization header, so this client states its own, and a header
+ * meant for another integration can't replace the key passed in.
  */
 function createClient(
   sdk: OpenAiModule,
@@ -127,9 +133,11 @@ function createClient(
     webhookSecret: null,
     maxRetries: 1,
     timeout: timeoutMs,
-    ...(endpoint.headers !== undefined
-      ? { defaultHeaders: { ...endpoint.headers } }
-      : {}),
+    fetchOptions: { redirect: 'manual' },
+    defaultHeaders: {
+      ...endpoint.headers,
+      Authorization: `Bearer ${apiKey}`,
+    },
   });
 }
 
